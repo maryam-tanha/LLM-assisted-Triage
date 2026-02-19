@@ -36,9 +36,7 @@ class SSHExecutor:
             if exit_code != 0 and not out.strip():
                 return f"STDERR: {err.strip()}"
             return out
-        except paramiko.SSHException as exc:
-            raise SSHExecutionError(str(exc), command, ssh_config.host) from exc
-        except OSError as exc:
+        except (paramiko.SSHException, OSError) as exc:
             raise SSHExecutionError(str(exc), command, ssh_config.host) from exc
 
     def close_all(self) -> None:

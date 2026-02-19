@@ -16,8 +16,10 @@ Run from rca-framework/:
 """
 
 import argparse
+import json
 import os
 import sys
+import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -67,16 +69,52 @@ def print_finding(finding: SpecialistFinding) -> None:
     print_separator(f"FINDING — {finding.subtask_id} ({finding.agent_type})")
     print(f"  Confidence : {finding.confidence:.0%}")
     if finding.evidence:
-        print(f"  Evidence   :")
+        print("  Evidence   :")
         for e in finding.evidence:
             print(f"    - {e}")
-    print(f"\n  Summary:\n")
+    print("\n  Summary:\n")
     for line in finding.findings.splitlines():
         print(f"    {line}")
     if finding.commands_run:
         print(f"\n  Commands run ({len(finding.commands_run)}):")
         for cmd in finding.commands_run:
             print(f"    $ {cmd}")
+
+
+# ── OpenRouter credit tracking ────────────────────────────────────────────────
+
+def fetch_openrouter_credits() -> dict | None:
+    """Return credit info from OpenRouter, or None on failure."""
+    api_key = os.environ.get("OPENROUTER_API_KEY")
+    if not api_key:
+        return None
+    req = urllib.request.Request(
+        "https://openrouter.ai/api/v1/auth/key",
+        headers={"Authorization": f"Bearer {api_key}"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read())["data"]
+    except Exception:
+        return None
+
+
+def print_credits(before: dict | None, after: dict | None) -> None:
+    print_separator("OPENROUTER CREDITS")
+    if after is None:
+        print("  Could not fetch credit information.")
+        return
+    usage_after = after.get("usage") or 0.0
+    limit = after.get("limit")
+    if before is not None:
+        consumed = usage_after - (before.get("usage") or 0.0)
+        print(f"  Used this run   : ${consumed:.6f}")
+    print(f"  Total used      : ${usage_after:.6f}")
+    if limit is not None:
+        print(f"  Credit limit    : ${limit:.2f}")
+        print(f"  Remaining       : ${limit - usage_after:.6f}")
+    else:
+        print("  Remaining       : unlimited (no cap set)")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -138,8 +176,10 @@ def main() -> None:
     if not args.service:
         print("\n  Calling LLM to plan investigation...")
 
+    credits_before = fetch_openrouter_credits()
     max_concurrency = int(os.environ.get("MAX_CONCURRENCY", "10"))
     result = graph.invoke(initial_state, config={"max_concurrency": max_concurrency})
+    credits_after = fetch_openrouter_credits()
 
     # ── 5. Print plan ─────────────────────────────────────────────────────────
     print_subtasks(result["subtasks"])
@@ -147,6 +187,7 @@ def main() -> None:
     findings: list[SpecialistFinding] = result["current_cycle_findings"]
     if not findings:
         print("\n  No findings produced.")
+        print_credits(credits_before, credits_after)
         return
 
     # ── 6. Print findings ─────────────────────────────────────────────────────
@@ -156,6 +197,8 @@ def main() -> None:
 
     print_separator()
     print(f"\n  Investigation complete. {len(findings)} finding(s) produced.\n")
+
+    print_credits(credits_before, credits_after)
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ which services need log investigation and what specifically to look for in each 
 
 ## What you must do
 
-Call the `create_log_subtasks` tool ONCE with a list of subtasks. Each subtask
+Call the `create_subtasks` tool ONCE with a list of subtasks. Each subtask
 targets one service where logs may contain evidence relevant to the incident.
 
 Rules:
@@ -26,4 +26,4 @@ Rules:
 
 ## Output
 
-You MUST call the `create_log_subtasks` tool. Do not write a prose response.
+You MUST call the `create_subtasks` tool. Do not write a prose response.

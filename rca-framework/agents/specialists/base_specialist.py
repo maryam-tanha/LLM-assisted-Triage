@@ -1,6 +1,7 @@
 import os
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -12,8 +13,8 @@ from config.models import SSHConfig
 from graph.state import SpecialistFinding
 from security.allowlist import CommandAllowlist
 from security.redactor import Redactor
-from tools.ssh_tool import SSHExecutionError, SSHExecutor
 from tools.docker_tool import DockerExecutor
+from tools.ssh_tool import SSHExecutionError, SSHExecutor
 
 # Load .env from the project root (rca-framework/)
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
@@ -34,6 +35,15 @@ _RUN_COMMAND_TOOL = {
     },
 }
 
+_MAX_ITERATIONS_PROMPT = (
+    "You have reached the maximum number of tool calls. "
+    "Please provide your final analysis now based on what you have gathered."
+)
+
+_INVESTIGATION_SUFFIX = (
+    "Use the run_command tool to gather additional log evidence if needed. "
+    "When you have enough information, provide your final analysis."
+)
 
 
 class BaseSpecialist(ABC):
@@ -63,16 +73,35 @@ class BaseSpecialist(ABC):
         service_context: dict,
     ) -> SpecialistFinding:
         executor = SSHExecutor()
+        redactor = Redactor()
         try:
             system_prompt = self._load_prompt()
             context_output = self._run_context_commands(ssh_config, executor)
-            final_text, commands_run = self._tool_loop(
-                system_prompt,
-                context_output,
-                subtask_description,
-                ssh_config,
-                executor,
+
+            def execute_command(command: str) -> str:
+                allowed, reason = CommandAllowlist.is_allowed(command)
+                if not allowed:
+                    return f"BLOCKED: {reason}"
+                try:
+                    raw = executor.execute(ssh_config, command)
+                    return redactor.redact(raw)
+                except SSHExecutionError as exc:
+                    return f"SSH_ERROR: {exc}"
+
+            user_content = (
+                f"## Context Output (from initial log gathering)\n\n"
+                f"{context_output}\n\n"
+                f"## Investigation Task\n\n"
+                f"{subtask_description}\n\n"
+                f"{_INVESTIGATION_SUFFIX}"
             )
+
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_content),
+            ]
+
+            final_text, commands_run = self._run_tool_loop(messages, execute_command)
             return self._parse_finding(final_text, subtask_id, commands_run)
         finally:
             executor.close_all()
@@ -91,14 +120,28 @@ class BaseSpecialist(ABC):
         # generic defaults (which are designed for bare-metal/VM hosts).
         commands = service_context.get("context_commands") or self.context_commands
         context_output = self._run_context_commands_docker(container, executor, commands)
-        final_text, commands_run = self._tool_loop_docker(
-            system_prompt,
-            context_output,
-            subtask_description,
-            container,
-            executor,
-            service_context,
+
+        def execute_command(command: str) -> str:
+            return executor.run_checked(container, command)
+
+        service_guidance = _build_service_guidance(service_context)
+        user_content = (
+            f"## Target Container\n\n"
+            f"  {container}\n\n"
+            f"## Context Output (from initial log gathering)\n\n"
+            f"{context_output}\n"
+            f"{service_guidance}\n"
+            f"## Investigation Task\n\n"
+            f"{subtask_description}\n\n"
+            f"{_INVESTIGATION_SUFFIX}"
         )
+
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_content),
+        ]
+
+        final_text, commands_run = self._run_tool_loop(messages, execute_command)
         return self._parse_finding(final_text, subtask_id, commands_run)
 
     def _load_prompt(self) -> str:
@@ -133,74 +176,6 @@ class BaseSpecialist(ABC):
                 outputs.append(f"=== {command} ===\nSSH_ERROR: {exc}\n")
         return "\n".join(outputs)
 
-    def _tool_loop(
-        self,
-        system_prompt: str,
-        context_output: str,
-        subtask_description: str,
-        ssh_config: SSHConfig,
-        executor: SSHExecutor,
-    ) -> tuple[str, list[str]]:
-        llm = get_llm()
-        llm_with_tools = llm.bind_tools([_RUN_COMMAND_TOOL])
-        redactor = Redactor()
-
-        messages: list = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(
-                content=(
-                    f"## Context Output (from initial log gathering)\n\n"
-                    f"{context_output}\n\n"
-                    f"## Investigation Task\n\n"
-                    f"{subtask_description}\n\n"
-                    f"Use the run_command tool to gather additional log evidence if needed. "
-                    f"When you have enough information, provide your final analysis."
-                )
-            ),
-        ]
-
-        commands_run: list[str] = []
-        max_iterations = int(os.environ.get("MAX_ITERATIONS", "10"))
-
-        for _ in range(max_iterations):
-            response: AIMessage = llm_with_tools.invoke(messages)
-            messages.append(response)
-
-            if not response.tool_calls:
-                return _extract_text(response), commands_run
-
-            tool_results: list[ToolMessage] = []
-            for tool_call in response.tool_calls:
-                command = tool_call["args"].get("command", "")
-                commands_run.append(command)
-
-                allowed, reason = CommandAllowlist.is_allowed(command)
-                if not allowed:
-                    result_content = f"BLOCKED: {reason}"
-                else:
-                    try:
-                        raw = executor.execute(ssh_config, command)
-                        result_content = redactor.redact(raw)
-                    except SSHExecutionError as exc:
-                        result_content = f"SSH_ERROR: {exc}"
-
-                tool_results.append(
-                    ToolMessage(content=result_content, tool_call_id=tool_call["id"])
-                )
-            messages.extend(tool_results)
-
-        # max_iterations reached — force final answer
-        messages.append(
-            HumanMessage(
-                content=(
-                    "You have reached the maximum number of tool calls. "
-                    "Please provide your final analysis now based on what you have gathered."
-                )
-            )
-        )
-        response = llm_with_tools.invoke(messages)
-        return _extract_text(response), commands_run
-
     def _run_context_commands_docker(
         self, container: str, executor: DockerExecutor, commands: list[str] | None = None
     ) -> str:
@@ -211,57 +186,31 @@ class BaseSpecialist(ABC):
         # This avoids the LLM ever needing to read /proc/1/fd/1 or /dev/stdout,
         # which block forever when tailed from inside the container.
         container_logs = executor.get_container_logs(container)
-        outputs.append(f"=== docker logs {container} (last {os.environ.get('DOCKER_LOGS_TAIL', '200')} lines) ===\n{container_logs}\n")
+        tail_count = os.environ.get("DOCKER_LOGS_TAIL", "200")
+        outputs.append(
+            f"=== docker logs {container} (last {tail_count} lines) ===\n"
+            f"{container_logs}\n"
+        )
 
         for command in (commands or self.context_commands):
             result = executor.run_checked(container, command)
             outputs.append(f"=== {command} ===\n{result}\n")
         return "\n".join(outputs)
 
-    def _tool_loop_docker(
+    def _run_tool_loop(
         self,
-        system_prompt: str,
-        context_output: str,
-        subtask_description: str,
-        container: str,
-        executor: DockerExecutor,
-        service_context: dict | None = None,
+        messages: list,
+        execute_command: Callable[[str], str],
     ) -> tuple[str, list[str]]:
+        """Core tool-calling loop shared by SSH and Docker execution paths.
+
+        Args:
+            messages: Initial conversation messages (system + user).
+            execute_command: Callable that takes a shell command string and
+                returns the (possibly redacted/blocked) output string.
+        """
         llm = get_llm()
         llm_with_tools = llm.bind_tools([_RUN_COMMAND_TOOL])
-
-        sc = service_context or {}
-        known_failures = sc.get("known_failures", [])
-        log_hints = sc.get("log_hints", [])
-
-        service_guidance = ""
-        if known_failures:
-            kf_lines = "\n".join(
-                f"  - Pattern: \"{kf['pattern']}\" → {kf['likely_cause']}"
-                for kf in known_failures
-            )
-            service_guidance += f"\n## Known Failure Patterns for This Service\n\n{kf_lines}\n"
-        if log_hints:
-            hint_lines = "\n".join(f"  - {h}" for h in log_hints)
-            service_guidance += f"\n## Investigation Hints\n\n{hint_lines}\n"
-
-        messages: list = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(
-                content=(
-                    f"## Target Container\n\n"
-                    f"  {container}\n\n"
-                    f"## Context Output (from initial log gathering)\n\n"
-                    f"{context_output}\n"
-                    f"{service_guidance}\n"
-                    f"## Investigation Task\n\n"
-                    f"{subtask_description}\n\n"
-                    f"Use the run_command tool to gather additional log evidence if needed. "
-                    f"When you have enough information, provide your final analysis."
-                )
-            ),
-        ]
-
         commands_run: list[str] = []
         max_iterations = int(os.environ.get("MAX_ITERATIONS", "10"))
 
@@ -276,20 +225,14 @@ class BaseSpecialist(ABC):
             for tool_call in response.tool_calls:
                 command = tool_call["args"].get("command", "")
                 commands_run.append(command)
-                result_content = executor.run_checked(container, command)
+                result_content = execute_command(command)
                 tool_results.append(
                     ToolMessage(content=result_content, tool_call_id=tool_call["id"])
                 )
             messages.extend(tool_results)
 
-        messages.append(
-            HumanMessage(
-                content=(
-                    "You have reached the maximum number of tool calls. "
-                    "Please provide your final analysis now based on what you have gathered."
-                )
-            )
-        )
+        # max_iterations reached -- force final answer
+        messages.append(HumanMessage(content=_MAX_ITERATIONS_PROMPT))
         response = llm_with_tools.invoke(messages)
         return _extract_text(response), commands_run
 
@@ -335,6 +278,25 @@ class BaseSpecialist(ABC):
             confidence=confidence,
             timestamp=datetime.now(timezone.utc),
         )
+
+
+def _build_service_guidance(service_context: dict | None) -> str:
+    """Format known failures and log hints into LLM prompt sections."""
+    sc = service_context or {}
+    known_failures = sc.get("known_failures", [])
+    log_hints = sc.get("log_hints", [])
+
+    sections: list[str] = []
+    if known_failures:
+        kf_lines = "\n".join(
+            f"  - Pattern: \"{kf['pattern']}\" -> {kf['likely_cause']}"
+            for kf in known_failures
+        )
+        sections.append(f"\n## Known Failure Patterns for This Service\n\n{kf_lines}\n")
+    if log_hints:
+        hint_lines = "\n".join(f"  - {h}" for h in log_hints)
+        sections.append(f"\n## Investigation Hints\n\n{hint_lines}\n")
+    return "".join(sections)
 
 
 def _extract_text(response: AIMessage) -> str:

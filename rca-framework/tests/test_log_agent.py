@@ -6,7 +6,7 @@ import pytest
 
 from agents.specialists.log_agent import LogAgent, log_specialist_node
 from config.models import SSHConfig
-from graph.state import GraphState, SpecialistFinding
+from graph.state import SpecialistFinding
 from security.allowlist import CommandAllowlist
 from security.redactor import Redactor
 from tools.ssh_tool import SSHExecutionError
@@ -200,10 +200,10 @@ class TestLogAgent:
     def test_context_commands_all_allowed(self, log_agent):
         for cmd in log_agent.context_commands:
             allowed, reason = CommandAllowlist.is_allowed(cmd)
-            assert allowed, f"Context command blocked: {cmd!r} — {reason}"
+            assert allowed, f"Context command blocked: {cmd!r} -- {reason}"
 
     @patch("agents.specialists.base_specialist.SSHExecutor")
-    @patch("agents.specialists.base_specialist._get_llm")
+    @patch("agents.specialists.base_specialist.get_llm")
     def test_run_returns_finding(self, mock_get_llm, mock_executor_cls, log_agent, ssh_config):
         mock_executor = MagicMock()
         mock_executor.execute.return_value = "Jan 01 00:00:00 myhost kernel: normal boot"
@@ -239,7 +239,7 @@ class TestLogAgent:
         mock_executor.close_all.assert_called_once()
 
     @patch("agents.specialists.base_specialist.SSHExecutor")
-    @patch("agents.specialists.base_specialist._get_llm")
+    @patch("agents.specialists.base_specialist.get_llm")
     def test_tool_loop_blocks_dangerous_command(
         self, mock_get_llm, mock_executor_cls, log_agent, ssh_config
     ):
@@ -274,7 +274,7 @@ class TestLogAgent:
             assert "rm -rf" not in call_args[0][1]
 
     @patch("agents.specialists.base_specialist.SSHExecutor")
-    @patch("agents.specialists.base_specialist._get_llm")
+    @patch("agents.specialists.base_specialist.get_llm")
     def test_tool_loop_max_iterations(
         self, mock_get_llm, mock_executor_cls, log_agent, ssh_config
     ):
@@ -306,7 +306,7 @@ class TestLogAgent:
         assert len(finding.commands_run) == 10
 
     @patch("agents.specialists.base_specialist.SSHExecutor")
-    @patch("agents.specialists.base_specialist._get_llm")
+    @patch("agents.specialists.base_specialist.get_llm")
     def test_ssh_error_mid_loop(
         self, mock_get_llm, mock_executor_cls, log_agent, ssh_config
     ):
@@ -355,22 +355,15 @@ class TestLogAgent:
 
 
 class TestLogSpecialistNode:
-    @patch("agents.specialists.log_agent.LogAgent.run")
-    def test_node_returns_reducer_compatible_dict(self, mock_run):
-        mock_run.return_value = _make_finding()
+    @patch("agents.specialists.log_agent.LogAgent.run_docker")
+    def test_node_returns_reducer_compatible_dict(self, mock_run_docker):
+        mock_run_docker.return_value = _make_finding()
 
-        state: GraphState = {
-            "incident_id": "INC-001",
-            "incident_summary": "Service crashed",
-            "current_cycle_findings": [],
-            "ssh_config": {
-                "host": "10.0.0.1",
-                "username": "admin",
-                "key_path": "/tmp/key.pem",
-            },
-            "service_context": {"service": "payments"},
+        state = {
             "subtask_id": "task-001",
             "subtask_description": "Check logs for crash",
+            "container": "example-voting-app-vote-1",
+            "service_context": {"service": "payments"},
         }
 
         result = log_specialist_node(state)
@@ -380,23 +373,22 @@ class TestLogSpecialistNode:
         assert len(result["current_cycle_findings"]) == 1
         assert result["current_cycle_findings"][0].agent_type == "log"
 
-    @patch("agents.specialists.log_agent.LogAgent.run")
-    def test_node_reconstructs_ssh_config(self, mock_run):
-        mock_run.return_value = _make_finding(subtask_id="t1")
+    @patch("agents.specialists.log_agent.LogAgent.run_docker")
+    def test_node_passes_correct_arguments(self, mock_run_docker):
+        mock_run_docker.return_value = _make_finding(subtask_id="t1")
 
-        state: GraphState = {
-            "incident_id": "INC-002",
-            "incident_summary": "OOM event",
-            "current_cycle_findings": [],
-            "ssh_config": {"host": "myhost", "username": "root", "password": "pw"},
-            "service_context": {},
+        state = {
             "subtask_id": "t1",
             "subtask_description": "Investigate OOM",
+            "container": "example-voting-app-worker-1",
+            "service_context": {"expected_behavior": "runs continuously"},
         }
 
         log_specialist_node(state)
 
-        call_args = mock_run.call_args
-        passed_ssh_config = call_args.kwargs.get("ssh_config") or call_args[0][2]
-        assert isinstance(passed_ssh_config, SSHConfig)
-        assert passed_ssh_config.host == "myhost"
+        mock_run_docker.assert_called_once_with(
+            subtask_id="t1",
+            subtask_description="Investigate OOM",
+            container="example-voting-app-worker-1",
+            service_context={"expected_behavior": "runs continuously"},
+        )
