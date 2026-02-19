@@ -1,0 +1,195 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{url}
+
+\usepackage{graphics}
+
+\usepackage{caption} 
+\captionsetup[table]{skip=10pt}
+\usepackage{tabularx}
+\usepackage{float}
+\usepackage{flushend}
+
+%\usepackage{subfig}
+\usepackage{epsfig}
+\usepackage{subcaption}
+\usepackage{calc}
+\usepackage{amstext}
+\usepackage{multicol}
+\usepackage{pslatex}
+\usepackage{algorithm2e}
+\usepackage{comment}
+\usepackage{dirtytalk}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+\begin{document}
+
+\title{An Open-source LLM-Assisted System for IT/SRE Triage }
+
+\makeatletter
+\newcommand{\linebreakand}{%
+  \end{@IEEEauthorhalign}
+  \hfill\mbox{}\par
+  \mbox{}\hfill\begin{@IEEEauthorhalign}
+}
+\makeatother
+
+
+
+\author{
+\IEEEauthorblockN{Student}
+\IEEEauthorblockA{\textit{Khoury College of Computer Sciences} \\
+\textit{Northeastern University}\\
+Vancouver, Canada \\
+pandya.kal@northeastern.edu}
+%\hspace{11.5cm}
+\and
+
+\IEEEauthorblockN{Dawood Sajjadi}
+\IEEEauthorblockA{\textit{TBC} \\
+\textit{}\\
+ \\
+}
+\and
+\IEEEauthorblockN{Maryam Tanha}
+\IEEEauthorblockA{\textit{Khoury College of Computer Sciences} \\
+\textit{Northeastern University}\\
+Vancouver, Canada \\
+m.tanha@northeastern.edu}
+}
+
+
+\maketitle
+\begin{abstract}
+
+\end{abstract}
+
+\begin{IEEEkeywords}
+
+\end{IEEEkeywords}
+\section{Introduction}
+Modern cloud-native products are composed of numerous interdependent microservices deployed
+across independent virtual machines. When a production incident occurs, SRE and DevOps teams
+must manually \texttt{SSH} into multiple hosts, sift through logs, and cross-reference metrics
+from disparate sources, a process that is slow, error-prone, and dependent on institutional
+knowledge~\cite{zhang2025aiops_survey, chen2024rcacopilot}. Recent surveys confirm that while
+LLMs have transformed AIOps, their generative capabilities must be carefully integrated with
+existing toolchains rather than replacing them entirely~\cite{zhang2025aiops_survey,
+szandala2025aiops_reliability}. A key finding motivating our design is that LLMs excel at
+generic reasoning but fail at \emph{topological reasoning}, specifically deducing service call chains
+without an explicit dependency graph~\cite{xu2025openrca}. This paper presents an open-source,
+hierarchical multi-agent framework that automates the full RCA workflow, grounding LLM reasoning
+in a structured YAML service topology and enforcing a strict least-privilege security model
+throughout~\cite{kholkar2025safeops}. By delegating log ingestion to local ``thin sidecar''
+agents that pre-process data via in-context learning~\cite{xu2024divlog}, the system avoids
+exceeding typical context limits while returning structured log evidence.
+
+%\section{Background \& Motivation}
+
+
+\section{Related Work}
+
+\subsection{Multi-Agent Architectures for IT Operations}
+The design of multi-agent systems for complex, long-horizon tasks has received significant
+attention. AgentOrchestra~\cite{zhang2025agentorchestra} introduces the TEA (Tool-Environment-Agent)
+protocol, showing that assigning specialized sub-agents is more effective for long-horizon tasks
+than relying on a single model. MetaGPT~\cite{hong2024metagpt} treats agents like employees by
+assigning each agent a Standard Operating Procedure (SOP), which turns abstract requirements
+into concrete outputs. The AOI
+system~\cite{bai2025aoi} further shows that a context compression layer between worker agents
+and a high-level observer prevents information overload, which matches our worker-to-synthesizer
+design. For IT
+operations specifically, the Triangle framework~\cite{yu2025triangle} demonstrated that a
+multi-LLM-agent system with specialized roles can achieve 97\% triage accuracy in a
+large-scale cloud environment. MasRouter~\cite{yue2025masrouter} introduces dynamic LLM routing,
+assigning queries to appropriately sized models based on complexity, a strategy that informs
+our router node design. SageCopilot~\cite{liao2025sagecopilot} emphasizes a strict checking
+phase where results are verified before being shown to the user, which aligns with our final
+review loop.
+
+\subsection{LLM-Based Root Cause Analysis}
+Automated RCA using LLMs has been deployed at scale in industry. RCACopilot~\cite{chen2024rcacopilot},
+built and deployed at Microsoft, uses recursive log summarization to convert raw logs into
+narrative symptom descriptions before feeding them to a planner, improving accuracy by
+approximately 15\% compared to raw log ingestion. FLASH~\cite{zhang2024flash} reduces
+time-to-mitigate from 90 minutes to 5.3 minutes by decomposing the diagnostic lifecycle into
+four supervised states and learning from historical incidents. MA-RCA~\cite{fu2026marca}
+provides empirical evidence that explicitly separating retrieval agents from validation agents
+achieves 95.8\% accuracy, compared to lower rates for single-agent systems suffering from
+context-switching errors. D-Bot~\cite{zhou2023dbot} applies Tree-of-Thought reasoning to
+database diagnosis, suggesting that planners should branch based on intermediate findings
+rather than generating a flat task list. For 5G/6G network fault diagnosis, Hy-LIFT~\cite{salman2025hylift}
+demonstrates a three-stage pipeline combining rule-based labeling, semi-supervised learning,
+and LLM narrative generation. The AIOps-for-Reliability study~\cite{szandala2025aiops_reliability}
+identifies a critical LLM failure mode, specifically negative bias, where models misclassify benign traffic
+surges as failures, directly motivating our independent Evaluator Agent.
+
+\subsection{Specialist Agent Design}
+Ashraf and Talavera~\cite{ashraf2025autonomous} show empirically that specialist multi-agent
+setups consistently outperform single ``super-agent'' generalists, because context-switching
+between domains degrades LLM performance. This finding underpins our decision to deploy
+narrow, domain-specific worker agents (Network, Memory, Log, Database, Cache, OS, and
+Application) rather than a single general-purpose investigator.
+
+\subsection{Log Analysis and Preprocessing}
+Feeding raw infrastructure logs directly to LLMs is a well-documented failure mode. DivLog~\cite{xu2024divlog}
+addresses this by selecting diverse, representative log templates before inference, reducing
+token usage while improving anomaly detection. This validates our ``thin sidecar'' worker
+design, in which agents perform local log parsing and return compressed summaries rather than
+raw output.
+
+\subsection{Agent Communication, Security, and Resilience}
+Inter-agent communication quality directly affects system reliability. The LACP
+protocol~\cite{li2025lacp} proposes a telecom-inspired Plan-Act-Observe handshake that
+prevents silent failures by requiring agents to explicitly acknowledge tasks and validate
+outputs. Huang et al.~\cite{huang2024resilience} stress-test multi-agent topologies by
+injecting faulty agents, finding that hierarchical hub-and-spoke architectures maintain
+integrity 95\% of the time, compared to flat peer-to-peer structures that collapse under
+error propagation, directly justifying our prohibition of worker-to-worker communication.
+SafeOps~\cite{kholkar2025safeops} applies the Principle of Least Privilege to LLM agents,
+providing the academic foundation for our read-only default execution state. The AWS MCP
+architecture~\cite{aws2025mcp_sre} demonstrates how exposing agent capabilities as Model
+Context Protocol (MCP) servers enables dynamic tool discovery without custom API wrappers,
+serving as the blueprint for our Phase 2 extensibility design.
+
+
+\section{Methodology}
+
+\section{Experiments and Results}
+
+
+\section{Conclusion and Future Directions}
+
+
+
+%% The acknowledgments section is defined using the "acks" environment
+%% (and NOT an unnumbered section). This ensures the proper
+%% identification of the section in the article metadata, and the
+%% consistent spelling of the heading.
+
+\section*{Acknowledgment}
+
+%%
+%% The next two lines define the bibliography style to be used, and
+%% the bibliography file.
+\bibliographystyle{ieeetr}
+\bibliography{references}
+
+%%
+%% If your work has an appendix, this is the place to put it.
+%\appendix
+
+
+
+\end{document}
+\endinput
+%%
+%% End of file `sample-authordraft.tex'.

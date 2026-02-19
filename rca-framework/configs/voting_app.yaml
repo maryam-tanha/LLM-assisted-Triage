@@ -1,0 +1,231 @@
+# -----------------------------------------------------------------------
+# Service Configuration: Example Voting App
+# -----------------------------------------------------------------------
+# This is the "source of truth" YAML for the RCA framework.
+# It describes every microservice the agent can investigate.
+#
+# Access method: docker exec (containers run on the local machine)
+# -----------------------------------------------------------------------
+
+product: ExampleVotingApp
+
+access_method: docker_exec
+
+services:
+
+  - service_name: vote
+    description: >
+      Python Flask web app that serves the voting UI. Users pick between
+      two options (Cats vs Dogs). Votes are pushed into Redis.
+    container: example-voting-app-vote-1
+    host_port: 8080
+    internal_port: 80
+    networks:
+      - front-tier
+      - back-tier
+    expected_behavior: |
+      Serves HTTP on port 80 inside the container, mapped to host :8080.
+      Healthcheck: curl -f http://localhost returns 200.
+      Connects to Redis on redis:6379 to push votes via LPUSH.
+      Typical response time < 200ms under light load.
+    known_failures:
+      - pattern: "ConnectionError: Error -2 connecting to redis:6379"
+        likely_cause: "Redis container is down or not yet healthy"
+      - pattern: "gunicorn worker timeout"
+        likely_cause: "Application hung or resource starvation"
+      - pattern: "HTTP 500 on /"
+        likely_cause: "Unhandled exception in app.py — check application logs"
+      - pattern: "redis.exceptions.ConnectionError"
+        likely_cause: "Redis is unreachable — REDIS env var may be misconfigured"
+      - pattern: "redis.exceptions.TimeoutError"
+        likely_cause: "Redis is overloaded or blocking — check memory and queue depth"
+    context_commands:
+      - "cat /proc/1/cmdline | tr '\\0' ' '"
+      - "cat /proc/1/environ | tr '\\0' '\\n' | grep -E 'REDIS|OPTION|FLASK|GUNICORN'"
+      - "ls /usr/local/app/"
+      - "cat /usr/local/app/app.py"
+    log_hints:
+      - "Application stdout is already provided above as 'docker logs' output — do NOT try /proc/1/fd/1 or /dev/stdout (they block forever)."
+      - "Look for Redis connection errors in the docker logs section: ConnectionError, TimeoutError, redis.exceptions."
+      - "A healthy vote POST request logs a 200 response line. Look for POST / 200 or POST / 500 in the logs."
+      - "Check REDIS env var to confirm the hostname the app uses to reach Redis: cat /proc/1/environ | tr '\\0' '\\n' | grep REDIS"
+      - "app.py contains the vote submission logic — look for the redis.lpush call and any exception handling."
+    additional_info:
+      owner: frontend-team
+      dependencies: [redis]
+      technology: Python / Flask / Gunicorn
+      dockerfile: ./vote/Dockerfile
+
+  - service_name: result
+    description: >
+      Node.js Express web app that displays live voting results.
+      Reads tallied votes from PostgreSQL and pushes updates via Socket.IO.
+    container: example-voting-app-result-1
+    host_port: 8081
+    internal_port: 80
+    networks:
+      - front-tier
+      - back-tier
+    expected_behavior: |
+      Serves HTTP on port 80 (mapped to host :8081).
+      Connects to PostgreSQL at db:5432 to read vote tallies.
+      Uses Socket.IO for real-time result push to browsers.
+      Debug inspector available on 127.0.0.1:9229.
+    known_failures:
+      - pattern: "Error: connect ECONNREFUSED 172.*:5432"
+        likely_cause: "PostgreSQL container is down or unreachable"
+      - pattern: "relation \"votes\" does not exist"
+        likely_cause: "Worker has not yet created the votes table"
+      - pattern: "FATAL: password authentication failed"
+        likely_cause: "DB credentials mismatch between result and db containers"
+      - pattern: "ConnectionError"
+        likely_cause: "Cannot reach PostgreSQL — check DATABASE_URL or POSTGRES env vars"
+    context_commands:
+      - "cat /proc/1/cmdline | tr '\\0' ' '"
+      - "cat /proc/1/environ | tr '\\0' '\\n' | grep -E 'DATABASE|POSTGRES|DB_|PG|PORT'"
+      - "ls /usr/local/app/"
+      - "cat /usr/local/app/server.js"
+    log_hints:
+      - "Application stdout is already provided above as 'docker logs' output — do NOT try /proc/1/fd/1 or /dev/stdout (they block forever)."
+      - "Look for 'Connected to db' in the docker logs — absence means DB connection failed at startup."
+      - "'relation \"votes\" does not exist' in docker logs means the worker never created the table."
+      - "Check env vars for the PostgreSQL connection details: cat /proc/1/environ | tr '\\0' '\\n' | grep -E 'DATABASE|POSTGRES|DB_|PG|PORT'"
+      - "server.js contains the DB query logic — cat /usr/local/app/server.js to inspect it."
+      - "If the result page shows 0 votes but no DB errors appear, the table may exist but be empty."
+    additional_info:
+      owner: frontend-team
+      dependencies: [db]
+      technology: Node.js / Express / Socket.IO
+      dockerfile: ./result/Dockerfile
+
+  - service_name: worker
+    description: >
+      .NET console application that consumes votes from Redis and
+      persists aggregated tallies into PostgreSQL.
+    container: example-voting-app-worker-1
+    host_port: null
+    internal_port: null
+    networks:
+      - back-tier
+    expected_behavior: |
+      Background worker with no exposed ports.
+      Connects to Redis (redis:6379) to consume votes via BRPOP.
+      Connects to PostgreSQL (db:5432) to write vote counts.
+      Creates the "votes" table if it does not exist.
+      Should run continuously without crashing; healthy state is
+      periodic "Processing vote for X" log lines.
+    known_failures:
+      - pattern: "Waiting for db"
+        likely_cause: "PostgreSQL is not yet ready or unreachable"
+      - pattern: "Waiting for redis"
+        likely_cause: "Redis container is not yet healthy"
+      - pattern: "Npgsql.NpgsqlException"
+        likely_cause: "PostgreSQL connection issue — check db container health"
+      - pattern: "StackExchange.Redis.RedisConnectionException"
+        likely_cause: "Redis connection lost — check redis container"
+      - pattern: "System.Net.Sockets.SocketException"
+        likely_cause: "Network connectivity failure to Redis or PostgreSQL"
+    context_commands:
+      - "cat /proc/1/cmdline | tr '\\0' ' '"
+      - "cat /proc/1/environ | tr '\\0' '\\n' | grep -E 'REDIS|POSTGRES|DATABASE|DB_|CONNECTION'"
+      - "ls /app/"
+      - "df -h"
+    log_hints:
+      - "Application stdout is already provided above as 'docker logs' output — do NOT try /proc/1/fd/1 or /dev/stdout (they block forever)."
+      - "Look for 'Waiting for db' or 'Waiting for redis' in the docker logs — these indicate a startup retry loop."
+      - "A healthy worker logs 'Processing vote for ...' messages as votes arrive. Absence of these means no votes are being consumed."
+      - "The worker creates the 'votes' table on first startup — if it crashed before that, result service will show a missing-table error."
+      - "Check env vars to confirm Redis and PostgreSQL hostnames: cat /proc/1/environ | tr '\\0' '\\n' | grep -E 'REDIS|POSTGRES|DATABASE|DB_|CONNECTION'"
+    additional_info:
+      owner: backend-team
+      dependencies: [redis, db]
+      technology: .NET / C#
+      dockerfile: ./worker/Dockerfile
+
+  - service_name: redis
+    description: >
+      Redis in-memory store used as the message broker between the
+      vote frontend and the worker. Stores pending votes.
+    container: example-voting-app-redis-1
+    host_port: null
+    internal_port: 6379
+    networks:
+      - back-tier
+    expected_behavior: |
+      Listens on port 6379. Healthcheck: redis-cli PING returns PONG.
+      Used as a queue — vote app LPUSHes to 'votes' key, worker BRPOPs.
+      Under normal voting load, LLEN votes should be near 0 (worker drains quickly).
+      Memory usage should stay low under normal voting load.
+    known_failures:
+      - pattern: "OOM command not allowed when used memory > 'maxmemory'"
+        likely_cause: "Redis memory limit reached — votes accumulating faster than worker drains"
+      - pattern: "MISCONF Redis is configured to save RDB snapshots"
+        likely_cause: "Disk full or permission issue preventing RDB persistence"
+      - pattern: "LOADING Redis is loading the dataset in memory"
+        likely_cause: "Redis is still recovering from persistence — will self-resolve"
+    context_commands:
+      - "redis-cli PING"
+      - "redis-cli LLEN votes"
+      - "redis-cli INFO server"
+      - "redis-cli INFO memory"
+      - "redis-cli INFO clients"
+      - "redis-cli INFO stats"
+      - "redis-cli DBSIZE"
+    log_hints:
+      - "redis-cli PING must return PONG — any other response means Redis is unhealthy."
+      - "redis-cli LLEN votes shows how many votes are queued. A large number (hundreds+) means the worker is not consuming them."
+      - "redis-cli INFO clients shows connected_clients — expect at least 2 (vote app + worker). Zero connections from worker = worker is down."
+      - "redis-cli INFO memory shows used_memory vs maxmemory — if maxmemory is set and memory is near the limit, new LPUSHes will be rejected."
+      - "redis-cli INFO stats shows total_commands_processed and instantaneous_ops_per_sec — low ops means no traffic."
+      - "redis-cli CLIENT LIST shows each connected client with its address and last command."
+    additional_info:
+      owner: infra-team
+      dependencies: []
+      technology: Redis (Alpine)
+      image: redis:alpine
+
+  - service_name: db
+    description: >
+      PostgreSQL database that stores the aggregated vote tallies.
+      The worker writes to it; the result app reads from it.
+    container: example-voting-app-db-1
+    host_port: null
+    internal_port: 5432
+    networks:
+      - back-tier
+    expected_behavior: |
+      Listens on port 5432. Healthcheck: psql SELECT 1 returns 1.
+      Database: postgres. User: postgres. Password: postgres.
+      Should contain a "votes" table created by the worker on first run.
+      The votes table holds one row per candidate (id, vote) with running tallies.
+      Backed by Docker named volume: example-voting-app_db-data.
+    known_failures:
+      - pattern: "FATAL: too many connections for role"
+        likely_cause: "Connection pool exhaustion from worker or result app"
+      - pattern: "FATAL: database \"postgres\" does not exist"
+        likely_cause: "Volume corrupted or init failed"
+      - pattern: "could not access file"
+        likely_cause: "Disk full or volume mount issue"
+      - pattern: "ERROR: relation \"votes\" does not exist"
+        likely_cause: "Worker has not run successfully to create the votes table"
+    context_commands:
+      - "psql -U postgres -c '\\l'"
+      - "psql -U postgres -c '\\dt'"
+      - "psql -U postgres -c 'SELECT * FROM votes;'"
+      - "psql -U postgres -c 'SELECT COUNT(*) FROM votes;'"
+      - "df -h"
+    log_hints:
+      - "psql -U postgres -c '\\dt' lists all tables — if 'votes' is missing, the worker never initialized the DB."
+      - "psql -U postgres -c 'SELECT * FROM votes;' shows the current tallies — zero rows means no votes were committed by the worker."
+      - "psql -U postgres -c 'SELECT COUNT(*) FROM votes;' — a non-zero count here means the DB is healthy and votes have been written."
+      - "psql -U postgres -c '\\l' confirms the 'postgres' database exists and is accessible."
+      - "df -h checks available disk space — a full volume prevents PostgreSQL from writing."
+      - "psql -U postgres -c 'SHOW max_connections;' shows the connection limit — compare against pg_stat_activity if suspecting pool exhaustion."
+    additional_info:
+      owner: infra-team
+      dependencies: []
+      technology: PostgreSQL 15 (Alpine)
+      image: postgres:15-alpine
+      credentials:
+        user: postgres
+        password: postgres

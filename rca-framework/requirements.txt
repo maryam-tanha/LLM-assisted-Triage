@@ -1,0 +1,9 @@
+langgraph>=0.2.0
+langchain-openrouter>=0.1.0
+langchain-core>=0.3.0
+pydantic>=2.0.0
+paramiko>=3.4.0
+pyyaml>=6.0.0
+python-dotenv>=1.0.0
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
