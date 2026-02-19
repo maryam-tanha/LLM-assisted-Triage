@@ -28,12 +28,13 @@ sys.path.insert(0, str(Path(__file__).parent))
 # Each import triggers the module-level register() call in that specialist file.
 # The parent LLM and graph builder discover available agents from the registry.
 import agents.specialists.log_agent  # noqa: F401
+import agents.specialists.runtime_status_agent  # noqa: F401
 
 # ── Core imports ──────────────────────────────────────────────────────────────
 from config.loader import load_config
 from graph.builder import build_graph
 from graph.registry import get_all
-from graph.state import GraphState, Subtask, SpecialistFinding
+from graph.state import CycleSummary, GraphState, Subtask, SpecialistFinding
 
 CONFIG_PATH = Path(__file__).parent / "configs" / "voting_app.yaml"
 
@@ -79,6 +80,28 @@ def print_finding(finding: SpecialistFinding) -> None:
         print(f"\n  Commands run ({len(finding.commands_run)}):")
         for cmd in finding.commands_run:
             print(f"    $ {cmd}")
+
+
+def print_cycle_summary(cs: CycleSummary) -> None:
+    print_separator(f"SYNTHESIS — Cycle {cs.cycle_num}")
+    print(f"  Specialists : {', '.join(cs.specialist_types)}")
+    print(f"\n  Summary:\n")
+    for line in cs.summary.splitlines():
+        print(f"    {line}")
+    if cs.key_findings:
+        print("\n  Key Findings:")
+        for kf in cs.key_findings:
+            print(f"    - {kf}")
+    if cs.recommendations:
+        print("\n  Recommendations:")
+        for r in cs.recommendations:
+            print(f"    - {r}")
+
+
+def print_final_report(report: str) -> None:
+    print_separator("FINAL RCA REPORT")
+    for line in report.splitlines():
+        print(f"  {line}")
 
 
 # ── OpenRouter credit tracking ────────────────────────────────────────────────
@@ -149,7 +172,15 @@ def main() -> None:
         "incident_summary": args.incident,
         "product_config": config.model_dump(),
         "subtasks": [],
+        "parent_decision": "",
+        "current_cycle": 0,
+        "max_cycles": int(os.environ.get("MAX_CYCLES", "3")),
         "current_cycle_findings": [],
+        "findings_offset": 0,
+        "cycle_summaries": [],
+        "cumulative_history": "",
+        "rca_finding": "",
+        "final_report": "",
     }
 
     # Manual mode: pre-populate subtasks so planning_node skips LLM
@@ -181,22 +212,40 @@ def main() -> None:
     result = graph.invoke(initial_state, config={"max_concurrency": max_concurrency})
     credits_after = fetch_openrouter_credits()
 
-    # ── 5. Print plan ─────────────────────────────────────────────────────────
-    print_subtasks(result["subtasks"])
+    # ── 5. Print subtasks from first cycle ───────────────────────────────────
+    if result.get("subtasks"):
+        print_subtasks(result["subtasks"])
 
-    findings: list[SpecialistFinding] = result["current_cycle_findings"]
+    findings: list[SpecialistFinding] = result.get("current_cycle_findings", [])
+    cycle_summaries: list[CycleSummary] = result.get("cycle_summaries", [])
+
     if not findings:
         print("\n  No findings produced.")
         print_credits(credits_before, credits_after)
         return
 
-    # ── 6. Print findings ─────────────────────────────────────────────────────
-    print_separator("ALL FINDINGS")
+    # ── 6. Print all findings ─────────────────────────────────────────────────
+    print_separator("ALL SPECIALIST FINDINGS")
     for finding in findings:
         print_finding(finding)
 
+    # ── 7. Print cycle summaries (synthesis output) ───────────────────────────
+    for cs in cycle_summaries:
+        print_cycle_summary(cs)
+
+    # ── 8. Print final RCA report ─────────────────────────────────────────────
+    final_report = result.get("final_report", "")
+    if final_report:
+        print_final_report(final_report)
+    else:
+        print("\n  (No final report — investigation ended without conclusion)")
+
     print_separator()
-    print(f"\n  Investigation complete. {len(findings)} finding(s) produced.\n")
+    total_cycles = result.get("current_cycle", 1)
+    print(
+        f"\n  Investigation complete. "
+        f"{len(findings)} finding(s) across {total_cycles} cycle(s).\n"
+    )
 
     print_credits(credits_before, credits_after)
 

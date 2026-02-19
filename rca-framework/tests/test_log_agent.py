@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
+from langchain_core.messages import AIMessage
 
 from agents.specialists.log_agent import LogAgent, log_specialist_node
 from config.models import SSHConfig
@@ -203,25 +204,22 @@ class TestLogAgent:
             assert allowed, f"Context command blocked: {cmd!r} -- {reason}"
 
     @patch("agents.specialists.base_specialist.SSHExecutor")
-    @patch("agents.specialists.base_specialist.get_llm")
-    def test_run_returns_finding(self, mock_get_llm, mock_executor_cls, log_agent, ssh_config):
+    @patch("agents.specialists.base_specialist.create_agent")
+    def test_run_returns_finding(self, mock_create_agent, mock_executor_cls, log_agent, ssh_config):
         mock_executor = MagicMock()
         mock_executor.execute.return_value = "Jan 01 00:00:00 myhost kernel: normal boot"
         mock_executor_cls.return_value = mock_executor
 
-        mock_response = MagicMock()
-        mock_response.tool_calls = []
-        mock_response.content = (
+        final_content = (
             "CONFIDENCE: 0.75\n"
             "EVIDENCE:\n"
             "- kernel: normal boot at Jan 01 00:00:00\n"
             "SUMMARY:\n"
             "## Log Analysis\nNo errors found.\n"
         )
-        mock_llm = MagicMock()
-        mock_llm.bind_tools.return_value = mock_llm
-        mock_llm.invoke.return_value = mock_response
-        mock_get_llm.return_value = mock_llm
+        mock_agent = MagicMock()
+        mock_agent.invoke.return_value = {"messages": [AIMessage(content=final_content)]}
+        mock_create_agent.return_value = mock_agent
 
         finding = log_agent.run(
             subtask_id="task-001",
@@ -239,66 +237,58 @@ class TestLogAgent:
         mock_executor.close_all.assert_called_once()
 
     @patch("agents.specialists.base_specialist.SSHExecutor")
-    @patch("agents.specialists.base_specialist.get_llm")
+    @patch("agents.specialists.base_specialist.create_agent")
     def test_tool_loop_blocks_dangerous_command(
-        self, mock_get_llm, mock_executor_cls, log_agent, ssh_config
+        self, mock_create_agent, mock_executor_cls, log_agent, ssh_config
     ):
         mock_executor = MagicMock()
         mock_executor.execute.return_value = "log data"
         mock_executor_cls.return_value = mock_executor
 
-        dangerous_response = MagicMock()
-        dangerous_response.tool_calls = [
-            {"id": "tc1", "name": "run_command", "args": {"command": "rm -rf /var/log/app.log"}}
+        # create_agent's invoke returns messages; one has tool_calls, last is final answer
+        messages_with_tool_call = [
+            AIMessage(
+                content="",
+                tool_calls=[{"id": "tc1", "name": "run_command", "args": {"command": "rm -rf /var/log/app.log"}}],
+            ),
+            AIMessage(
+                content="CONFIDENCE: 0.4\nEVIDENCE:\n- No useful logs\nSUMMARY:\nCommand was blocked.\n"
+            ),
         ]
-        dangerous_response.content = []
-
-        final_response = MagicMock()
-        final_response.tool_calls = []
-        final_response.content = (
-            "CONFIDENCE: 0.4\nEVIDENCE:\n- No useful logs\nSUMMARY:\nCommand was blocked.\n"
-        )
-
-        mock_llm = MagicMock()
-        mock_llm.bind_tools.return_value = mock_llm
-        mock_llm.invoke.side_effect = [dangerous_response, final_response]
-        mock_get_llm.return_value = mock_llm
+        mock_agent = MagicMock()
+        mock_agent.invoke.return_value = {"messages": messages_with_tool_call}
+        mock_create_agent.return_value = mock_agent
 
         finding = log_agent.run("task-002", "Investigate errors", ssh_config, {})
 
         # Dangerous command is tracked in commands_run
         assert "rm -rf /var/log/app.log" in finding.commands_run
 
-        # SSH execute must NOT have been called with the dangerous command
+        # SSH execute must NOT have been called with the dangerous command (allowlist blocks it)
         for call_args in mock_executor.execute.call_args_list:
             assert "rm -rf" not in call_args[0][1]
 
     @patch("agents.specialists.base_specialist.SSHExecutor")
-    @patch("agents.specialists.base_specialist.get_llm")
+    @patch("agents.specialists.base_specialist.create_agent")
     def test_tool_loop_max_iterations(
-        self, mock_get_llm, mock_executor_cls, log_agent, ssh_config
+        self, mock_create_agent, mock_executor_cls, log_agent, ssh_config
     ):
         mock_executor = MagicMock()
         mock_executor.execute.return_value = "some output"
         mock_executor_cls.return_value = mock_executor
 
-        always_tool_response = MagicMock()
-        always_tool_response.tool_calls = [
-            {"id": "tc0", "name": "run_command", "args": {"command": "journalctl -n 10"}}
-        ]
-        always_tool_response.content = []
-
-        final_forced_response = MagicMock()
-        final_forced_response.tool_calls = []
-        final_forced_response.content = (
-            "CONFIDENCE: 0.5\nEVIDENCE:\n- hit limit\nSUMMARY:\nMax iterations reached.\n"
+        # Simulate 10 tool-call turns then final answer (recursion_limit caps the loop)
+        tool_call_msg = AIMessage(
+            content="",
+            tool_calls=[{"id": "tc0", "name": "run_command", "args": {"command": "journalctl -n 10"}}],
         )
-
-        mock_llm = MagicMock()
-        mock_llm.bind_tools.return_value = mock_llm
-        # 10 tool responses + 1 final forced response
-        mock_llm.invoke.side_effect = [always_tool_response] * 10 + [final_forced_response]
-        mock_get_llm.return_value = mock_llm
+        final_msg = AIMessage(
+            content="CONFIDENCE: 0.5\nEVIDENCE:\n- hit limit\nSUMMARY:\nMax iterations reached.\n"
+        )
+        messages = [tool_call_msg] * 10 + [final_msg]
+        mock_agent = MagicMock()
+        mock_agent.invoke.return_value = {"messages": messages}
+        mock_create_agent.return_value = mock_agent
 
         finding = log_agent.run("task-003", "Long investigation", ssh_config, {})
 
@@ -306,9 +296,9 @@ class TestLogAgent:
         assert len(finding.commands_run) == 10
 
     @patch("agents.specialists.base_specialist.SSHExecutor")
-    @patch("agents.specialists.base_specialist.get_llm")
+    @patch("agents.specialists.base_specialist.create_agent")
     def test_ssh_error_mid_loop(
-        self, mock_get_llm, mock_executor_cls, log_agent, ssh_config
+        self, mock_create_agent, mock_executor_cls, log_agent, ssh_config
     ):
         mock_executor = MagicMock()
         # First 3 calls = context commands (succeed), 4th = tool loop command (fails)
@@ -320,22 +310,18 @@ class TestLogAgent:
         ]
         mock_executor_cls.return_value = mock_executor
 
-        tool_response = MagicMock()
-        tool_response.tool_calls = [
-            {"id": "tc1", "name": "run_command", "args": {"command": "grep error /var/log/app.log"}}
+        messages_with_tool_call = [
+            AIMessage(
+                content="",
+                tool_calls=[{"id": "tc1", "name": "run_command", "args": {"command": "grep error /var/log/app.log"}}],
+            ),
+            AIMessage(
+                content="CONFIDENCE: 0.3\nEVIDENCE:\n- SSH error encountered\nSUMMARY:\nSSH failed.\n"
+            ),
         ]
-        tool_response.content = []
-
-        final_response = MagicMock()
-        final_response.tool_calls = []
-        final_response.content = (
-            "CONFIDENCE: 0.3\nEVIDENCE:\n- SSH error encountered\nSUMMARY:\nSSH failed.\n"
-        )
-
-        mock_llm = MagicMock()
-        mock_llm.bind_tools.return_value = mock_llm
-        mock_llm.invoke.side_effect = [tool_response, final_response]
-        mock_get_llm.return_value = mock_llm
+        mock_agent = MagicMock()
+        mock_agent.invoke.return_value = {"messages": messages_with_tool_call}
+        mock_create_agent.return_value = mock_agent
 
         finding = log_agent.run("task-004", "Check app errors", ssh_config, {})
         assert finding.confidence == 0.3

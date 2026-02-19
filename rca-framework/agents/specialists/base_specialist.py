@@ -6,7 +6,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain.agents import create_agent
+from langchain.tools import tool
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from config.llm import get_llm
 from config.models import SSHConfig
@@ -18,27 +20,6 @@ from tools.ssh_tool import SSHExecutionError, SSHExecutor
 
 # Load .env from the project root (rca-framework/)
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
-
-# OpenAI-compatible tool schema (OpenRouter uses `parameters`, not `input_schema`)
-_RUN_COMMAND_TOOL = {
-    "name": "run_command",
-    "description": "Execute a read-only shell command on the target host and return output",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "command": {
-                "type": "string",
-                "description": "Shell command to run on the remote host",
-            }
-        },
-        "required": ["command"],
-    },
-}
-
-_MAX_ITERATIONS_PROMPT = (
-    "You have reached the maximum number of tool calls. "
-    "Please provide your final analysis now based on what you have gathered."
-)
 
 _INVESTIGATION_SUFFIX = (
     "Use the run_command tool to gather additional log evidence if needed. "
@@ -202,39 +183,34 @@ class BaseSpecialist(ABC):
         messages: list,
         execute_command: Callable[[str], str],
     ) -> tuple[str, list[str]]:
-        """Core tool-calling loop shared by SSH and Docker execution paths.
+        """Run the specialist as a ReAct agent via create_agent (model + run_command tool)."""
+        system_prompt = messages[0].content if messages else ""
+        user_message = messages[1] if len(messages) > 1 else HumanMessage(content="")
 
-        Args:
-            messages: Initial conversation messages (system + user).
-            execute_command: Callable that takes a shell command string and
-                returns the (possibly redacted/blocked) output string.
-        """
-        llm = get_llm()
-        llm_with_tools = llm.bind_tools([_RUN_COMMAND_TOOL])
-        commands_run: list[str] = []
-        max_iterations = int(os.environ.get("MAX_ITERATIONS", "10"))
+        @tool
+        def run_command(command: str) -> str:
+            """Execute a read-only shell command on the target host and return output."""
+            return execute_command(command)
 
-        for _ in range(max_iterations):
-            response: AIMessage = llm_with_tools.invoke(messages)
-            messages.append(response)
+        agent = create_agent(
+            get_llm(),
+            tools=[run_command],
+            system_prompt=system_prompt,
+        )
+        max_iter = int(os.environ.get("MAX_ITERATIONS", "10"))
+        result = agent.invoke(
+            {"messages": [user_message]},
+            config={"recursion_limit": max_iter * 2 + 1},
+        )
 
-            if not response.tool_calls:
-                return _extract_text(response), commands_run
-
-            tool_results: list[ToolMessage] = []
-            for tool_call in response.tool_calls:
-                command = tool_call["args"].get("command", "")
-                commands_run.append(command)
-                result_content = execute_command(command)
-                tool_results.append(
-                    ToolMessage(content=result_content, tool_call_id=tool_call["id"])
-                )
-            messages.extend(tool_results)
-
-        # max_iterations reached -- force final answer
-        messages.append(HumanMessage(content=_MAX_ITERATIONS_PROMPT))
-        response = llm_with_tools.invoke(messages)
-        return _extract_text(response), commands_run
+        commands_run = [
+            tc.get("args", {}).get("command", "")
+            for msg in result["messages"]
+            for tc in (getattr(msg, "tool_calls", None) or [])
+        ]
+        final_message = result["messages"][-1]
+        final_text = _extract_text(final_message) if isinstance(final_message, AIMessage) else str(getattr(final_message, "content", ""))
+        return final_text, commands_run
 
     def _parse_finding(
         self,

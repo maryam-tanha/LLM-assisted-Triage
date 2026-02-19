@@ -44,6 +44,18 @@ class Subtask(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
+class CycleSummary(BaseModel):
+    """Synthesis output for one investigation cycle."""
+    cycle_num: int
+    summary: str                  # narrative cross-domain correlation
+    key_findings: list[str]       # bullet-point findings
+    recommendations: list[str]    # what to investigate next
+    specialist_types: list[str]   # which agent types contributed
+    timestamp: datetime
+
+    model_config = ConfigDict(frozen=True)
+
+
 class GraphState(TypedDict):
     # Incident
     incident_id: str
@@ -54,6 +66,20 @@ class GraphState(TypedDict):
 
     # Parent agent output
     subtasks: list[Subtask]
+    parent_decision: str   # "investigate" | "conclude"
 
-    # Specialist findings — reducer appends results from parallel runs
+    # Cycle tracking
+    current_cycle: int     # incremented each time parent decides "investigate"
+    max_cycles: int        # safety cap; enforced in parent_agent_node
+
+    # Specialist findings — reducer appends results from parallel fan-out
     current_cycle_findings: Annotated[list[SpecialistFinding], operator.add]
+    findings_offset: int   # how many findings have already been synthesized
+
+    # Synthesis output — reducer appends one CycleSummary per cycle
+    cycle_summaries: Annotated[list[CycleSummary], operator.add]
+    cumulative_history: str   # running narrative updated by synthesis each cycle
+
+    # Final output set when parent concludes
+    rca_finding: str
+    final_report: str

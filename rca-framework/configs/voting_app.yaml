@@ -11,6 +11,10 @@ product: ExampleVotingApp
 
 access_method: docker_exec
 
+agents:
+  - agents/log_agent.yaml
+  - agents/runtime_status_agent.yaml
+
 services:
 
   - service_name: vote
@@ -44,6 +48,12 @@ services:
       - "cat /proc/1/environ | tr '\\0' '\\n' | grep -E 'REDIS|OPTION|FLASK|GUNICORN'"
       - "ls /usr/local/app/"
       - "cat /usr/local/app/app.py"
+      - "df -h"
+      - "free -m"
+      - "ps aux"
+      - "uptime"
+      - "cat /proc/1/status"
+      - "cat /proc/1/limits"
     log_hints:
       - "Application stdout is already provided above as 'docker logs' output — do NOT try /proc/1/fd/1 or /dev/stdout (they block forever)."
       - "Look for Redis connection errors in the docker logs section: ConnectionError, TimeoutError, redis.exceptions."
@@ -85,6 +95,12 @@ services:
       - "cat /proc/1/environ | tr '\\0' '\\n' | grep -E 'DATABASE|POSTGRES|DB_|PG|PORT'"
       - "ls /usr/local/app/"
       - "cat /usr/local/app/server.js"
+      - "df -h"
+      - "free -m"
+      - "ps aux"
+      - "uptime"
+      - "cat /proc/1/status"
+      - "cat /proc/1/limits"
     log_hints:
       - "Application stdout is already provided above as 'docker logs' output — do NOT try /proc/1/fd/1 or /dev/stdout (they block forever)."
       - "Look for 'Connected to db' in the docker logs — absence means DB connection failed at startup."
@@ -130,6 +146,11 @@ services:
       - "cat /proc/1/environ | tr '\\0' '\\n' | grep -E 'REDIS|POSTGRES|DATABASE|DB_|CONNECTION'"
       - "ls /app/"
       - "df -h"
+      - "free -m"
+      - "ps aux"
+      - "uptime"
+      - "cat /proc/1/status"
+      - "cat /proc/1/limits"
     log_hints:
       - "Application stdout is already provided above as 'docker logs' output — do NOT try /proc/1/fd/1 or /dev/stdout (they block forever)."
       - "Look for 'Waiting for db' or 'Waiting for redis' in the docker logs — these indicate a startup retry loop."
@@ -171,6 +192,10 @@ services:
       - "redis-cli INFO clients"
       - "redis-cli INFO stats"
       - "redis-cli DBSIZE"
+      - "df -h"
+      - "free -m"
+      - "ps aux"
+      - "uptime"
     log_hints:
       - "redis-cli PING must return PONG — any other response means Redis is unhealthy."
       - "redis-cli LLEN votes shows how many votes are queued. A large number (hundreds+) means the worker is not consuming them."
@@ -214,6 +239,11 @@ services:
       - "psql -U postgres -c 'SELECT * FROM votes;'"
       - "psql -U postgres -c 'SELECT COUNT(*) FROM votes;'"
       - "df -h"
+      - "free -m"
+      - "ps aux"
+      - "uptime"
+      - "cat /proc/1/status"
+      - "cat /proc/1/limits"
     log_hints:
       - "psql -U postgres -c '\\dt' lists all tables — if 'votes' is missing, the worker never initialized the DB."
       - "psql -U postgres -c 'SELECT * FROM votes;' shows the current tallies — zero rows means no votes were committed by the worker."
