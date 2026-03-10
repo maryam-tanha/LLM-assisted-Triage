@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from langchain.agents import create_agent
 from langchain.tools import tool
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langgraph.errors import GraphRecursionError
 
 from config.llm import get_llm
 from config.models import SSHConfig
@@ -198,10 +199,27 @@ class BaseSpecialist(ABC):
             system_prompt=system_prompt,
         )
         max_iter = int(os.environ.get("MAX_ITERATIONS", "10"))
-        result = agent.invoke(
-            {"messages": [user_message]},
-            config={"recursion_limit": max_iter * 2 + 1},
-        )
+        # Each ReAct iteration = 1 AI step + 1 tool step = 2 steps, plus 1 final answer.
+        # Add a 20% buffer (min 2) so the LLM has room to wrap up without hard-stopping
+        # mid-loop. The buffer scales with MAX_ITERATIONS so it stays proportional.
+        buffer = max(2, max_iter // 5)
+        recursion_limit = (max_iter + buffer) * 2 + 1
+        try:
+            result = agent.invoke(
+                {"messages": [user_message]},
+                config={"recursion_limit": recursion_limit},
+            )
+        except GraphRecursionError:
+            return (
+                "CONFIDENCE: 0.1\n"
+                "EVIDENCE:\n"
+                "- Investigation aborted: agent exceeded maximum tool-call iterations\n"
+                "SUMMARY:\n"
+                "The specialist reached the iteration limit without producing a final answer. "
+                "This usually means the LLM entered a tool-call loop. "
+                "Consider reducing the scope of the subtask or increasing MAX_ITERATIONS.\n",
+                [],
+            )
 
         commands_run = [
             tc.get("args", {}).get("command", "")
