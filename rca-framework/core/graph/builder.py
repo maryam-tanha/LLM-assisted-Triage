@@ -24,9 +24,11 @@ Graph topology:
                            END
 
 Adding a new specialist type requires only:
-  1. Creating a BaseSpecialist subclass
-  2. Calling register() at the bottom of its module
-  3. Importing that module in demo.py (or any entry point) to trigger registration
+  1. Adding a YAML file to profiles/<name>/agents/<type>.yaml with context_commands
+     and system_prompt — no Python code needed (auto-registered via YAMLSpecialist).
+  OR for specialists that need custom Python logic:
+  1. Creating a BaseSpecialist subclass and calling register() at the bottom
+  2. Importing that module in demo.py (or any entry point) to trigger registration
 """
 
 from langgraph.graph import StateGraph, START, END
@@ -34,8 +36,9 @@ from langgraph.types import Send
 
 from core.agents.parent_agent import run_parent_agent
 from core.agents.synthesis_agent import run_synthesis_agent
+from core.agents.specialists.yaml_specialist import YAMLSpecialist
 from framework.models import ProductConfig, ServiceConfig
-from core.graph.registry import get_all
+from core.graph.registry import get_all, SpecialistRegistration
 from core.graph.state import GraphState, Subtask
 
 
@@ -72,7 +75,29 @@ def build_graph(product_config: ProductConfig):
     can look up service details and prompts without serialising the full config
     into graph state.
     """
-    registry = get_all()
+    # Copy so we can extend without mutating the module-level global registry
+    registry: dict = dict(get_all())
+
+    # Auto-register YAML-only specialists (no Python subclass required)
+    for _agent_cfg in product_config.agents:
+        if _agent_cfg.agent_type not in registry:
+            def _make_node(ac):
+                def node_fn(state: dict) -> dict:
+                    finding = YAMLSpecialist(ac).run_docker(
+                        subtask_id=state["subtask_id"],
+                        subtask_description=state["subtask_description"],
+                        container=state["container"],
+                        service_context=state["service_context"],
+                        system_prompt=state["system_prompt"],
+                    )
+                    return {"current_cycle_findings": [finding]}
+                return node_fn
+            registry[_agent_cfg.agent_type] = SpecialistRegistration(
+                agent_type=_agent_cfg.agent_type,
+                description=_agent_cfg.description,
+                node_name=f"{_agent_cfg.agent_type}_specialist",
+                node_fn=_make_node(_agent_cfg),
+            )
 
     # ── Parent agent node ────────────────────────────────────────────────────
     def parent_agent_node(state: GraphState) -> dict:

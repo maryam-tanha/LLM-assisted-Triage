@@ -83,6 +83,79 @@ class DockerExecutor:
         except Exception as exc:
             return f"DOCKER_LOGS_ERROR: {exc}"
 
+    def get_inspect(self, container: str) -> str:
+        """Run `docker inspect <container>` on the host and return redacted JSON.
+
+        Used by DockerSpecsAgent to retrieve full container configuration
+        (resource limits, restart policy, mounts, port bindings, image, env).
+        Not an interactive LLM tool — called once during context gathering.
+        """
+        max_output_bytes = _env_int("MAX_OUTPUT_BYTES", 65536)
+        try:
+            result = subprocess.run(
+                ["docker", "inspect", container],
+                capture_output=True,
+                timeout=10,
+            )
+            raw = result.stdout[:max_output_bytes].decode("utf-8", errors="replace")
+            return self._redactor.redact(raw) if raw.strip() else "(no inspect output)"
+        except subprocess.TimeoutExpired:
+            return "(unavailable: docker inspect timed out)"
+        except FileNotFoundError:
+            return "(unavailable: docker binary not found)"
+        except Exception as exc:
+            return f"(unavailable: {exc})"
+
+    def get_stats_snapshot(self, container: str) -> str:
+        """Run `docker stats --no-stream` on the host for a live resource snapshot.
+
+        Returns a table row with CPU%, memory usage/limit, net I/O, block I/O, PIDs.
+        """
+        try:
+            result = subprocess.run(
+                [
+                    "docker", "stats", container, "--no-stream",
+                    "--format",
+                    "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.BlockIO}}\t{{.PIDs}}",
+                ],
+                capture_output=True,
+                timeout=15,
+            )
+            raw = result.stdout.decode("utf-8", errors="replace")
+            return self._redactor.redact(raw) if raw.strip() else "(no stats output)"
+        except subprocess.TimeoutExpired:
+            return "(unavailable: docker stats timed out)"
+        except FileNotFoundError:
+            return "(unavailable: docker binary not found)"
+        except Exception as exc:
+            return f"(unavailable: {exc})"
+
+    def get_events(self, container: str, since: str = "24h") -> str:
+        """Fetch recent Docker daemon events for the container from the host.
+
+        Covers OOM kills, restarts, health check failures, and start/stop events.
+        """
+        try:
+            result = subprocess.run(
+                [
+                    "docker", "events",
+                    "--filter", f"container={container}",
+                    "--since", since,
+                    "--until", "now",
+                    "--format", "{{.Time}} {{.Type}} {{.Action}}",
+                ],
+                capture_output=True,
+                timeout=10,
+            )
+            raw = result.stdout.decode("utf-8", errors="replace")
+            return raw.strip() if raw.strip() else "(no events in last 24h)"
+        except subprocess.TimeoutExpired:
+            return "(unavailable: docker events timed out)"
+        except FileNotFoundError:
+            return "(unavailable: docker binary not found)"
+        except Exception as exc:
+            return f"(unavailable: {exc})"
+
     def run_checked(self, container: str, command: str) -> str:
         """Validate via allowlist, execute, and redact output.
 

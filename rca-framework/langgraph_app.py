@@ -13,14 +13,17 @@ Usage (LangGraph Studio via CLI):
 The initial state can be sent from the Studio UI as JSON.
 """
 
+import importlib
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-# Register specialists before building the graph
-import core.agents.specialists.log_agent           # noqa: F401
-import core.agents.specialists.runtime_status_agent  # noqa: F401
+# Auto-discover and register all specialist modules
+_spec_dir = Path(__file__).parent / "core" / "agents" / "specialists"
+for _f in sorted(_spec_dir.glob("*_agent.py")):
+    if _f.stem != "base_specialist":
+        importlib.import_module(f"core.agents.specialists.{_f.stem}")
 
 from framework.loader import load_profile
 from core.graph.builder import build_graph

@@ -14,26 +14,26 @@ Run from rca-framework/:
 """
 
 import base64
-import io
+import importlib
 import os
 import sys
 import uuid
-import zipfile
 from datetime import datetime
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import URLError
 
 import streamlit as st
-import yaml
 from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).parent))
 load_dotenv(Path(__file__).parent / ".env")
 
-# ── Register specialists (triggers module-level register() calls) ───────────────
-import core.agents.specialists.log_agent           # noqa: F401
-import core.agents.specialists.runtime_status_agent  # noqa: F401
+# ── Auto-discover and register all specialist modules ──────────────────────────
+_spec_dir = Path(__file__).parent / "core" / "agents" / "specialists"
+for _f in sorted(_spec_dir.glob("*_agent.py")):
+    if _f.stem != "base_specialist":
+        importlib.import_module(f"core.agents.specialists.{_f.stem}")
 
 from framework.loader import load_profile, list_profiles
 from core.graph.builder import build_graph
@@ -60,7 +60,7 @@ _STATUS = {
 
 # ── Page config & CSS ──────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="RCA Framework",
+    page_title="Incident Investigator",
     page_icon="🔍",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -68,27 +68,36 @@ st.set_page_config(
 
 st.markdown("""
 <style>
+  /* Pill-shaped agent status badges */
   .node-badge {
-    display: inline-block;
-    padding: 4px 12px;
-    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 12px 3px 10px;
+    border-radius: 20px;
     font-family: 'Courier New', monospace;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     color: #fff;
-    margin: 3px 4px 3px 0;
-    letter-spacing: 0.3px;
+    margin: 2px 4px 2px 0;
+    letter-spacing: 0.2px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
   }
-  .conf-track { background: #2d3748; height: 4px; border-radius: 2px; margin-top: 6px; }
-  .conf-fill  { height: 4px; border-radius: 2px; background: #059669; }
+
+  /* Confidence bar */
+  .conf-track { background: #374151; height: 3px; border-radius: 2px; margin-top: 5px; margin-bottom: 8px; }
+  .conf-fill  { height: 3px; border-radius: 2px; }
+
+  /* Section divider labels */
   .section-label {
-    font-size: 11px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 1px; color: #6b7280; margin-bottom: 6px;
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 1.5px; color: #6b7280; margin-bottom: 6px;
   }
+
   .pending-badge {
     display: inline-block;
     font-size: 10px; font-weight: 600; letter-spacing: 0.5px;
-    color: #d97706; margin-left: 6px;
+    color: #f59e0b; margin-left: 6px;
   }
 </style>
 """, unsafe_allow_html=True)
@@ -193,8 +202,8 @@ def _load_graph(profile_name: str) -> None:
 def _sidebar() -> tuple[str, str, str, int, int, bool]:
     """Returns (profile_name, incident_id, incident, max_cycles, max_concurrency, run_clicked)."""
     with st.sidebar:
-        st.title("🔍 RCA Framework")
-        st.caption("LangGraph · Multi-Agent Observability")
+        st.title("🔍 Incident Investigator")
+        st.caption("Multi-agent RCA · Powered by LangGraph")
         st.divider()
 
         cfg = st.selectbox(
@@ -222,7 +231,7 @@ def _sidebar() -> tuple[str, str, str, int, int, bool]:
             help="How many plan → investigate → synthesise loops before forcing a conclusion",
         )
 
-        with st.expander("⚙ Advanced"):
+        with st.expander("⚙️ Advanced Settings"):
             max_conc = st.number_input(
                 "Max Concurrency",
                 min_value=1, max_value=20,
@@ -438,134 +447,14 @@ def _render_state_tab() -> None:
                 )
 
 
-# ── Config tab helpers ──────────────────────────────────────────────────────────
-
-def _zip_profile(profile_path: Path) -> bytes:
-    """Create a ZIP of the entire profile directory."""
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for f in profile_path.rglob("*"):
-            if f.is_file():
-                zf.write(f, f.relative_to(profile_path.parent))
-    return buf.getvalue()
-
-
-def _save_yaml_and_reload(file_path: Path, content: str, profile_path: Path) -> None:
-    """Validate YAML, write to disk, reload profile and graph."""
-    try:
-        yaml.safe_load(content)
-    except yaml.YAMLError as e:
-        st.error(f"Invalid YAML: {e}")
-        return
-    file_path.write_text(content, encoding="utf-8")
-    try:
-        config = load_profile(profile_path)
-        graph = build_graph(config)
-        mermaid_source = _build_mermaid_source()
-        png = _mermaid_source_to_png(mermaid_source)
-        st.session_state.config = config
-        st.session_state.graph = graph
-        st.session_state.graph_png = png
-        st.session_state.graph_mermaid_source = mermaid_source
-        st.session_state.loaded_cfg = profile_path.name
-        st.success(f"Saved and reloaded: {file_path.name}")
-        st.rerun()
-    except Exception as e:
-        st.error(f"Reload failed after save: {e}")
-
-
-def _render_config_tab() -> None:
-    """YAML editors for all files in the active profile."""
-    if st.session_state.running:
-        st.info("Config editing is disabled while a run is in progress.")
-        return
-
-    config = st.session_state.config
-    if config is None or config.profile_path is None:
-        st.caption("Load a profile first.")
-        return
-
-    profile_path: Path = config.profile_path
-
-    # ── ZIP download / upload ─────────────────────────────────────────────────
-    col1, col2 = st.columns(2)
-    with col1:
-        st.download_button(
-            "⬇ Download Profile ZIP",
-            data=_zip_profile(profile_path),
-            file_name=f"{profile_path.name}.zip",
-            mime="application/zip",
-            use_container_width=True,
-        )
-    with col2:
-        uploaded = st.file_uploader(
-            "Upload ZIP", type=["zip"], label_visibility="collapsed",
-            help="Upload a profile ZIP to replace the current profile",
-        )
-        if uploaded is not None:
-            if st.button("Apply Uploaded ZIP", use_container_width=True):
-                try:
-                    with zipfile.ZipFile(io.BytesIO(uploaded.read())) as zf:
-                        zf.extractall(PROFILES_DIR)
-                    st.success("Profile uploaded. Reload the page to see changes.")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Upload failed: {e}")
-
-    st.divider()
-
-    # ── profile.yaml ──────────────────────────────────────────────────────────
-    profile_yaml_path = profile_path / "profile.yaml"
-    with st.expander("Product Config (profile.yaml)", expanded=False):
-        raw = profile_yaml_path.read_text(encoding="utf-8")
-        edited = st.text_area(
-            "profile.yaml", value=raw, height=300, key="edit_profile_yaml",
-            label_visibility="collapsed",
-        )
-        if st.button("Save Product Config", key="save_profile_yaml"):
-            _save_yaml_and_reload(profile_yaml_path, edited, profile_path)
-
-    # ── Agent configs ─────────────────────────────────────────────────────────
-    agents_dir = profile_path / "agents"
-    if agents_dir.exists():
-        st.markdown("**Agent Configs + Prompts**")
-        for f in sorted(agents_dir.glob("*.yaml")):
-            with st.expander(f.stem, expanded=False):
-                raw = f.read_text(encoding="utf-8")
-                edited = st.text_area(
-                    f.name, value=raw, height=420, key=f"edit_agent_{f.stem}",
-                    label_visibility="collapsed",
-                )
-                if st.button(f"Save {f.stem}", key=f"save_agent_{f.stem}"):
-                    _save_yaml_and_reload(f, edited, profile_path)
-
-    # ── Framework prompts ─────────────────────────────────────────────────────
-    st.markdown("**Framework Prompts**")
-    for fname, label in [
-        ("parent.yaml", "Parent Agent Prompt"),
-        ("synthesis.yaml", "Synthesis Agent Prompt"),
-    ]:
-        fpath = profile_path / fname
-        if fpath.exists():
-            with st.expander(label, expanded=False):
-                raw = fpath.read_text(encoding="utf-8")
-                edited = st.text_area(
-                    fname, value=raw, height=420, key=f"edit_{fname}",
-                    label_visibility="collapsed",
-                )
-                if st.button(f"Save {label}", key=f"save_{fname}"):
-                    _save_yaml_and_reload(fpath, edited, profile_path)
-
-
-# ── Right panel: static (tabs Timeline | State | RCA Report | Config) ─────────
+# ── Right panel: static (tabs Timeline | State | RCA Report) ──────────────────
 def render_right_panel_static() -> None:
-    """Unified right panel: cycle-grouped Timeline accordion + State + RCA Report + Config."""
+    """Unified right panel: cycle-grouped Timeline accordion + State + RCA Report."""
     has_report = bool(st.session_state.final_report)
 
-    tab_labels = ["Timeline", "State"]
+    tab_labels = ["📋 Timeline", "📊 Status"]
     if has_report:
-        tab_labels.append("RCA Report")
-    tab_labels.append("Config")
+        tab_labels.append("📝 RCA Report")
     tabs = st.tabs(tab_labels)
 
     with tabs[0]:
@@ -574,14 +463,9 @@ def render_right_panel_static() -> None:
     with tabs[1]:
         _render_state_tab()
 
-    idx = 2
     if has_report:
-        with tabs[idx]:
+        with tabs[2]:
             st.markdown(st.session_state.final_report)
-        idx += 1
-
-    with tabs[idx]:
-        _render_config_tab()
 
 
 # ── Right panel: live (during streaming — cycle timeline + compact state) ───────
@@ -768,7 +652,7 @@ def main() -> None:
     with center:
         with st.container(border=True):
             st.markdown(
-                '<div class="section-label">Graph Topology</div>',
+                '<div class="section-label">Agent Graph</div>',
                 unsafe_allow_html=True,
             )
             if st.session_state.graph_png:
@@ -781,13 +665,13 @@ def main() -> None:
             else:
                 st.caption("Select a profile to load the graph.")
 
-        st.markdown('<div class="section-label">Node Status</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-label">Live Agent Status</div>', unsafe_allow_html=True)
         status_placeholder = st.empty()
         status_placeholder.markdown(_badges_html(), unsafe_allow_html=True)
 
     # ── Right: unified Activity + Inspector (one placeholder) ───────────────────
     with right:
-        st.markdown('<div class="section-label">Activity & Inspector</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-label">Investigation Feed</div>', unsafe_allow_html=True)
         right_panel_placeholder = st.empty()
 
     # ── Trigger run or render static right panel ────────────────────────────────

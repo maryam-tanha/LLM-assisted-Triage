@@ -46,6 +46,12 @@ ALLOWED_PATTERNS: list[re.Pattern] = [
     re.compile(r"^psql\b"),
     re.compile(r"^node\b"),
     re.compile(r"^python\b"),
+    # Network inspection (read-only)
+    re.compile(r"^ss\b"),
+    re.compile(r"^ip\s"),
+    re.compile(r"^cat /etc/"),
+    # cgroup / sysfs (read-only)
+    re.compile(r"^cat /sys/"),
 ]
 
 

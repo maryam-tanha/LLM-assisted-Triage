@@ -26,10 +26,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 # ── Register specialists ──────────────────────────────────────────────────────
-# Each import triggers the module-level register() call in that specialist file.
-# The parent LLM and graph builder discover available agents from the registry.
-import core.agents.specialists.log_agent  # noqa: F401
-import core.agents.specialists.runtime_status_agent  # noqa: F401
+# Auto-discover all *_agent.py files in core/agents/specialists/ and import them.
+# Each import triggers the module-level register() call in that specialist file,
+# making it available to the parent LLM and graph builder automatically.
+import importlib
+
+_spec_dir = Path(__file__).parent / "core" / "agents" / "specialists"
+for _f in sorted(_spec_dir.glob("*_agent.py")):
+    if _f.stem != "base_specialist":
+        importlib.import_module(f"core.agents.specialists.{_f.stem}")
 
 # ── Core imports ──────────────────────────────────────────────────────────────
 from framework.loader import load_profile

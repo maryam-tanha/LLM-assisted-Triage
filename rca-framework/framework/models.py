@@ -64,6 +64,8 @@ class AgentConfig(BaseModel):
     when_to_use: str = ""
     do_not_use: str = ""
     system_prompt: str = ""             # loaded from YAML; replaces .txt file lookup
+    context_commands: list[str] = []    # fallback commands for YAML-only specialists
+    gather_docker_host_context: bool = False  # prepend docker inspect/stats/events
 
     def parent_llm_description(self) -> str:
         """Full text shown to the parent LLM for this agent."""

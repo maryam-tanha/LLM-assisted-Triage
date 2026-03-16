@@ -100,10 +100,11 @@ class TestAgentConfig:
 class TestLoadProfileAgents:
     def test_agents_loaded_from_yaml(self):
         config = load_profile(PROFILE_DIR)
-        assert len(config.agents) == 2
         agent_types = {a.agent_type for a in config.agents}
         assert "log" in agent_types
         assert "runtime_status" in agent_types
+        assert "network" in agent_types
+        assert "docker_specs" in agent_types
 
     def test_log_agent_has_description(self):
         config = load_profile(PROFILE_DIR)
