@@ -5,12 +5,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 from langchain_core.messages import AIMessage
 
-from agents.specialists.log_agent import LogAgent, log_specialist_node
-from config.models import SSHConfig
-from graph.state import SpecialistFinding
-from security.allowlist import CommandAllowlist
-from security.redactor import Redactor
-from tools.ssh_tool import SSHExecutionError
+from core.agents.specialists.log_agent import LogAgent, log_specialist_node
+from framework.models import SSHConfig
+from core.graph.state import SpecialistFinding
+from core.security.allowlist import CommandAllowlist
+from core.security.redactor import Redactor
+from core.tools.ssh_tool import SSHExecutionError
 
 
 # ---------------------------------------------------------------------------
@@ -203,8 +203,8 @@ class TestLogAgent:
             allowed, reason = CommandAllowlist.is_allowed(cmd)
             assert allowed, f"Context command blocked: {cmd!r} -- {reason}"
 
-    @patch("agents.specialists.base_specialist.SSHExecutor")
-    @patch("agents.specialists.base_specialist.create_agent")
+    @patch("core.agents.specialists.base_specialist.SSHExecutor")
+    @patch("core.agents.specialists.base_specialist.create_agent")
     def test_run_returns_finding(self, mock_create_agent, mock_executor_cls, log_agent, ssh_config):
         mock_executor = MagicMock()
         mock_executor.execute.return_value = "Jan 01 00:00:00 myhost kernel: normal boot"
@@ -236,8 +236,8 @@ class TestLogAgent:
         assert len(finding.evidence) > 0
         mock_executor.close_all.assert_called_once()
 
-    @patch("agents.specialists.base_specialist.SSHExecutor")
-    @patch("agents.specialists.base_specialist.create_agent")
+    @patch("core.agents.specialists.base_specialist.SSHExecutor")
+    @patch("core.agents.specialists.base_specialist.create_agent")
     def test_tool_loop_blocks_dangerous_command(
         self, mock_create_agent, mock_executor_cls, log_agent, ssh_config
     ):
@@ -268,8 +268,8 @@ class TestLogAgent:
         for call_args in mock_executor.execute.call_args_list:
             assert "rm -rf" not in call_args[0][1]
 
-    @patch("agents.specialists.base_specialist.SSHExecutor")
-    @patch("agents.specialists.base_specialist.create_agent")
+    @patch("core.agents.specialists.base_specialist.SSHExecutor")
+    @patch("core.agents.specialists.base_specialist.create_agent")
     def test_tool_loop_max_iterations(
         self, mock_create_agent, mock_executor_cls, log_agent, ssh_config
     ):
@@ -295,8 +295,8 @@ class TestLogAgent:
         assert isinstance(finding, SpecialistFinding)
         assert len(finding.commands_run) == 10
 
-    @patch("agents.specialists.base_specialist.SSHExecutor")
-    @patch("agents.specialists.base_specialist.create_agent")
+    @patch("core.agents.specialists.base_specialist.SSHExecutor")
+    @patch("core.agents.specialists.base_specialist.create_agent")
     def test_ssh_error_mid_loop(
         self, mock_create_agent, mock_executor_cls, log_agent, ssh_config
     ):
@@ -341,7 +341,7 @@ class TestLogAgent:
 
 
 class TestLogSpecialistNode:
-    @patch("agents.specialists.log_agent.LogAgent.run_docker")
+    @patch("core.agents.specialists.log_agent.LogAgent.run_docker")
     def test_node_returns_reducer_compatible_dict(self, mock_run_docker):
         mock_run_docker.return_value = _make_finding()
 
@@ -359,7 +359,7 @@ class TestLogSpecialistNode:
         assert len(result["current_cycle_findings"]) == 1
         assert result["current_cycle_findings"][0].agent_type == "log"
 
-    @patch("agents.specialists.log_agent.LogAgent.run_docker")
+    @patch("core.agents.specialists.log_agent.LogAgent.run_docker")
     def test_node_passes_correct_arguments(self, mock_run_docker):
         mock_run_docker.return_value = _make_finding(subtask_id="t1")
 
@@ -377,4 +377,5 @@ class TestLogSpecialistNode:
             subtask_description="Investigate OOM",
             container="example-voting-app-worker-1",
             service_context={"expected_behavior": "runs continuously"},
+            system_prompt="",
         )

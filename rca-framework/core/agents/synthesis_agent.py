@@ -16,15 +16,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from config.llm import get_llm
-from graph.state import CycleSummary, SpecialistFinding
+from framework.llm import get_llm
+from core.graph.state import CycleSummary, SpecialistFinding
 
-load_dotenv(Path(__file__).parent.parent / ".env")
-
-
-def _load_system_prompt() -> str:
-    path = Path(__file__).parent.parent / "config" / "prompts" / "synthesis_system.txt"
-    return path.read_text(encoding="utf-8")
+load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
 
 def _build_user_message(
@@ -90,11 +85,12 @@ def _update_history(current: str, cycle_num: int, synthesis_text: str) -> str:
     return f"{current}\n\n{entry}" if current else entry
 
 
-def run_synthesis_agent(state: dict) -> dict:
+def run_synthesis_agent(state: dict, system_prompt: str = "") -> dict:
     """
     LangGraph node function for the synthesis agent.
 
     Reads pending specialist findings, synthesizes them, updates cycle state.
+    The system_prompt is injected by the graph builder closure from product_config.
     """
     all_findings: list[SpecialistFinding] = state.get("current_cycle_findings", [])
     offset: int = state.get("findings_offset", 0)
@@ -109,7 +105,7 @@ def run_synthesis_agent(state: dict) -> dict:
 
     llm = get_llm()
     messages = [
-        SystemMessage(content=_load_system_prompt()),
+        SystemMessage(content=system_prompt),
         HumanMessage(
             content=_build_user_message(
                 incident_summary, new_findings, cumulative_history, cycle_num

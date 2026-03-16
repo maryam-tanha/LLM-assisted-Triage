@@ -32,11 +32,11 @@ Adding a new specialist type requires only:
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
 
-from agents.parent_agent import run_parent_agent
-from agents.synthesis_agent import run_synthesis_agent
-from config.loader import ProductConfig, ServiceConfig
-from graph.registry import get_all
-from graph.state import GraphState, Subtask
+from core.agents.parent_agent import run_parent_agent
+from core.agents.synthesis_agent import run_synthesis_agent
+from framework.models import ProductConfig, ServiceConfig
+from core.graph.registry import get_all
+from core.graph.state import GraphState, Subtask
 
 
 def _service_context(svc: ServiceConfig | None) -> dict:
@@ -69,7 +69,8 @@ def build_graph(product_config: ProductConfig):
     Compile and return the RCA LangGraph.
 
     product_config is captured as a closure so the parent and dispatch logic
-    can look up service details without serialising the full config into graph state.
+    can look up service details and prompts without serialising the full config
+    into graph state.
     """
     registry = get_all()
 
@@ -114,6 +115,7 @@ def build_graph(product_config: ProductConfig):
             cumulative_history=state.get("cumulative_history", ""),
             current_cycle=current_cycle,
             max_cycles=state.get("max_cycles", 3),
+            system_prompt=product_config.parent_prompt,
         )
         decision = update.get("parent_decision", "")
         if decision == "investigate":
@@ -126,6 +128,10 @@ def build_graph(product_config: ProductConfig):
         elif decision == "conclude":
             print("  Parent decided: conclude.")
         return update
+
+    # ── Synthesis node (closure to inject synthesis_prompt) ──────────────────
+    def synthesis_node(state: GraphState) -> dict:
+        return run_synthesis_agent(state, system_prompt=product_config.synthesis_prompt)
 
     # ── Routing: parent → specialists (fan-out) or END ───────────────────────
     def route_parent(state: GraphState) -> list[Send] | str:
@@ -143,6 +149,7 @@ def build_graph(product_config: ProductConfig):
             if entry is None:
                 continue
             svc = product_config.get_service(subtask.service_name)
+            agent_cfg = product_config.get_agent(subtask.assigned_agent)
             sends.append(
                 Send(
                     entry.node_name,
@@ -151,6 +158,7 @@ def build_graph(product_config: ProductConfig):
                         "subtask_description": _subtask_description(subtask, svc),
                         "container": subtask.container,
                         "service_context": _service_context(svc),
+                        "system_prompt": agent_cfg.system_prompt if agent_cfg else "",
                     },
                 )
             )
@@ -160,7 +168,7 @@ def build_graph(product_config: ProductConfig):
     builder = StateGraph(GraphState)
 
     builder.add_node("parent_agent", parent_agent_node)
-    builder.add_node("synthesis", run_synthesis_agent)
+    builder.add_node("synthesis", synthesis_node)
 
     for entry in registry.values():
         builder.add_node(entry.node_name, entry.node_fn)

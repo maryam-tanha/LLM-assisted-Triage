@@ -3,11 +3,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from config.llm import get_llm
-from config.loader import ProductConfig
-from graph.state import CycleSummary, Subtask
+from framework.llm import get_llm
+from framework.models import ProductConfig
+from core.graph.state import CycleSummary, Subtask
 
-load_dotenv(Path(__file__).parent.parent / ".env")
+load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
 # ── Tool: investigate — produce subtasks for specialist agents ────────────────
 _CREATE_SUBTASKS_TOOL = {
@@ -99,11 +99,6 @@ _WRITE_RCA_TOOL = {
         ],
     },
 }
-
-
-def _load_system_prompt() -> str:
-    path = Path(__file__).parent.parent / "config" / "prompts" / "parent_system.txt"
-    return path.read_text(encoding="utf-8")
 
 
 def _build_user_message(
@@ -198,6 +193,7 @@ def run_parent_agent(
     cumulative_history: str = "",
     current_cycle: int = 0,
     max_cycles: int = 3,
+    system_prompt: str = "",
 ) -> dict:
     """
     Call the LLM parent agent to decide the next action.
@@ -220,7 +216,7 @@ def run_parent_agent(
     llm_with_tools = llm.bind_tools(tools, tool_choice="any")
 
     messages = [
-        SystemMessage(content=_load_system_prompt()),
+        SystemMessage(content=system_prompt),
         HumanMessage(
             content=_build_user_message(
                 incident_summary,

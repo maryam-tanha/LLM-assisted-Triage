@@ -19,14 +19,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 # Register specialists before building the graph
-import agents.specialists.log_agent           # noqa: F401
-import agents.specialists.runtime_status_agent  # noqa: F401
+import core.agents.specialists.log_agent           # noqa: F401
+import core.agents.specialists.runtime_status_agent  # noqa: F401
 
-from config.loader import load_config
-from graph.builder import build_graph
+from framework.loader import load_profile
+from core.graph.builder import build_graph
 
-_CONFIG_PATH = Path(__file__).parent / "configs" / "voting_app.yaml"
-_config = load_config(_CONFIG_PATH)
+_PROFILE_DIR = Path(__file__).parent / "profiles" / "voting_app"
+_config = load_profile(_PROFILE_DIR)
 
 # LangGraph Studio discovers this variable via langgraph.json
 graph = build_graph(_config)

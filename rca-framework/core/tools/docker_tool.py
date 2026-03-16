@@ -1,8 +1,8 @@
 import os
 import subprocess
 
-from security.allowlist import CommandAllowlist
-from security.redactor import Redactor
+from core.security.allowlist import CommandAllowlist
+from core.security.redactor import Redactor
 
 
 class DockerExecutionError(Exception):

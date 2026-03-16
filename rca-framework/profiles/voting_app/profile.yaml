@@ -1,19 +1,13 @@
 # -----------------------------------------------------------------------
-# Service Configuration: Example Voting App
+# Profile: voting_app
 # -----------------------------------------------------------------------
-# This is the "source of truth" YAML for the RCA framework.
-# It describes every microservice the agent can investigate.
-#
-# Access method: docker exec (containers run on the local machine)
+# Self-contained profile for the Example Voting App.
+# Agent configs and prompts live in agents/ subdirectory.
 # -----------------------------------------------------------------------
 
+profile_name: voting_app
 product: ExampleVotingApp
-
 access_method: docker_exec
-
-agents:
-  - agents/log_agent.yaml
-  - agents/runtime_status_agent.yaml
 
 services:
 

@@ -11,16 +11,16 @@ from langchain.tools import tool
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.errors import GraphRecursionError
 
-from config.llm import get_llm
-from config.models import SSHConfig
-from graph.state import SpecialistFinding
-from security.allowlist import CommandAllowlist
-from security.redactor import Redactor
-from tools.docker_tool import DockerExecutor
-from tools.ssh_tool import SSHExecutionError, SSHExecutor
+from framework.llm import get_llm
+from framework.models import SSHConfig
+from core.graph.state import SpecialistFinding
+from core.security.allowlist import CommandAllowlist
+from core.security.redactor import Redactor
+from core.tools.docker_tool import DockerExecutor
+from core.tools.ssh_tool import SSHExecutionError, SSHExecutor
 
 # Load .env from the project root (rca-framework/)
-load_dotenv(Path(__file__).parent.parent.parent / ".env")
+load_dotenv(Path(__file__).parent.parent.parent.parent / ".env")
 
 _INVESTIGATION_SUFFIX = (
     "Use the run_command tool to gather additional log evidence if needed. "
@@ -31,8 +31,9 @@ _INVESTIGATION_SUFFIX = (
 class BaseSpecialist(ABC):
     """Abstract base for all specialist agents.
 
-    Subclasses must define agent_type, prompt_file, and context_commands.
-    The run() method orchestrates the full investigation flow.
+    Subclasses must define agent_type and context_commands.
+    The system_prompt is injected at call time from the profile YAML.
+    The prompt_file property is kept for backward compatibility with tests.
     """
 
     @property
@@ -40,8 +41,9 @@ class BaseSpecialist(ABC):
     def agent_type(self) -> str: ...
 
     @property
-    @abstractmethod
-    def prompt_file(self) -> str: ...
+    def prompt_file(self) -> str:
+        """Deprecated: kept for backward compatibility. Prompt now comes from YAML."""
+        return ""
 
     @property
     @abstractmethod
@@ -53,11 +55,12 @@ class BaseSpecialist(ABC):
         subtask_description: str,
         ssh_config: SSHConfig,
         service_context: dict,
+        system_prompt: str = "",
     ) -> SpecialistFinding:
         executor = SSHExecutor()
         redactor = Redactor()
         try:
-            system_prompt = self._load_prompt()
+            resolved_prompt = system_prompt or self._load_prompt_fallback()
             context_output = self._run_context_commands(ssh_config, executor)
 
             def execute_command(command: str) -> str:
@@ -79,7 +82,7 @@ class BaseSpecialist(ABC):
             )
 
             messages = [
-                SystemMessage(content=system_prompt),
+                SystemMessage(content=resolved_prompt),
                 HumanMessage(content=user_content),
             ]
 
@@ -94,10 +97,11 @@ class BaseSpecialist(ABC):
         subtask_description: str,
         container: str,
         service_context: dict,
+        system_prompt: str = "",
     ) -> SpecialistFinding:
         """Run the specialist against a local Docker container instead of SSH."""
         executor = DockerExecutor()
-        system_prompt = self._load_prompt()
+        resolved_prompt = system_prompt or self._load_prompt_fallback()
         # Prefer service-level context_commands from the YAML over the agent's
         # generic defaults (which are designed for bare-metal/VM hosts).
         commands = service_context.get("context_commands") or self.context_commands
@@ -119,26 +123,29 @@ class BaseSpecialist(ABC):
         )
 
         messages = [
-            SystemMessage(content=system_prompt),
+            SystemMessage(content=resolved_prompt),
             HumanMessage(content=user_content),
         ]
 
         final_text, commands_run = self._run_tool_loop(messages, execute_command)
         return self._parse_finding(final_text, subtask_id, commands_run)
 
-    def _load_prompt(self) -> str:
+    def _load_prompt_fallback(self) -> str:
+        """Fallback prompt loader for backward compatibility when system_prompt is not injected.
+
+        Attempts to load from the old config/prompts/ path. If not found, returns empty string.
+        """
+        if not self.prompt_file:
+            return ""
         prompt_path = (
-            Path(__file__).parent.parent.parent
+            Path(__file__).parent.parent.parent.parent
             / "config"
             / "prompts"
             / self.prompt_file
         )
-        if not prompt_path.exists():
-            raise FileNotFoundError(
-                f"Prompt file not found: {prompt_path}. "
-                f"Expected at config/prompts/{self.prompt_file}"
-            )
-        return prompt_path.read_text(encoding="utf-8")
+        if prompt_path.exists():
+            return prompt_path.read_text(encoding="utf-8")
+        return ""
 
     def _run_context_commands(
         self, ssh_config: SSHConfig, executor: SSHExecutor
@@ -165,8 +172,6 @@ class BaseSpecialist(ABC):
 
         # Prepend docker logs (host-side) so the LLM has the actual stdout/stderr
         # of the application before it tries any exec commands.
-        # This avoids the LLM ever needing to read /proc/1/fd/1 or /dev/stdout,
-        # which block forever when tailed from inside the container.
         container_logs = executor.get_container_logs(container)
         tail_count = os.environ.get("DOCKER_LOGS_TAIL", "200")
         outputs.append(
@@ -199,9 +204,6 @@ class BaseSpecialist(ABC):
             system_prompt=system_prompt,
         )
         max_iter = int(os.environ.get("MAX_ITERATIONS", "10"))
-        # Each ReAct iteration = 1 AI step + 1 tool step = 2 steps, plus 1 final answer.
-        # Add a 20% buffer (min 2) so the LLM has room to wrap up without hard-stopping
-        # mid-loop. The buffer scales with MAX_ITERATIONS so it stays proportional.
         buffer = max(2, max_iter // 5)
         recursion_limit = (max_iter + buffer) * 2 + 1
         try:

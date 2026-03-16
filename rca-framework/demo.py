@@ -13,6 +13,7 @@ Run from rca-framework/:
     python demo.py
     python demo.py --incident "Result page showing 0 votes for all candidates"
     python demo.py --service vote
+    python demo.py --profile profiles/my_product
 """
 
 import argparse
@@ -27,16 +28,16 @@ sys.path.insert(0, str(Path(__file__).parent))
 # ── Register specialists ──────────────────────────────────────────────────────
 # Each import triggers the module-level register() call in that specialist file.
 # The parent LLM and graph builder discover available agents from the registry.
-import agents.specialists.log_agent  # noqa: F401
-import agents.specialists.runtime_status_agent  # noqa: F401
+import core.agents.specialists.log_agent  # noqa: F401
+import core.agents.specialists.runtime_status_agent  # noqa: F401
 
 # ── Core imports ──────────────────────────────────────────────────────────────
-from config.loader import load_config
-from graph.builder import build_graph
-from graph.registry import get_all
-from graph.state import CycleSummary, GraphState, Subtask, SpecialistFinding
+from framework.loader import load_profile
+from core.graph.builder import build_graph
+from core.graph.registry import get_all
+from core.graph.state import CycleSummary, GraphState, Subtask, SpecialistFinding
 
-CONFIG_PATH = Path(__file__).parent / "configs" / "voting_app.yaml"
+DEFAULT_PROFILE_DIR = Path(__file__).parent / "profiles" / "voting_app"
 
 DEFAULT_INCIDENT = (
     "Users are reporting that the voting page loads but votes don't seem to be "
@@ -154,11 +155,19 @@ def main() -> None:
         default=None,
         help="Target one service directly (skips parent LLM planning)",
     )
+    parser.add_argument(
+        "--profile",
+        default=str(DEFAULT_PROFILE_DIR),
+        help="Path to profile directory (default: profiles/voting_app)",
+    )
     args = parser.parse_args()
+
+    profile_dir = Path(args.profile)
 
     # ── 1. Load config ────────────────────────────────────────────────────────
     print_separator("LOADING CONFIG")
-    config = load_config(CONFIG_PATH)
+    config = load_profile(profile_dir)
+    print(f"  Profile     : {config.profile_name or profile_dir.name}")
     print(f"  Product     : {config.product}")
     print(f"  Services    : {[s.service_name for s in config.services]}")
     print(f"  Specialists : {list(get_all().keys())}")

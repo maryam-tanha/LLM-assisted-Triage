@@ -1,5 +1,5 @@
-from agents.specialists.base_specialist import BaseSpecialist
-from graph.registry import SpecialistRegistration, register
+from core.agents.specialists.base_specialist import BaseSpecialist
+from core.graph.registry import SpecialistRegistration, register
 
 
 class LogAgent(BaseSpecialist):
@@ -11,6 +11,7 @@ class LogAgent(BaseSpecialist):
 
     @property
     def prompt_file(self) -> str:
+        # Kept for backward compatibility with existing tests.
         return "log_system.txt"
 
     @property
@@ -30,15 +31,15 @@ def log_specialist_node(state: dict) -> dict:
     LangGraph node for the Log Specialist.
 
     Receives a payload dict dispatched via Send() from the graph's dispatch step.
-    Expected keys: subtask_id, subtask_description, container, service_context.
-    Returns a dict with current_cycle_findings so the state reducer can accumulate
-    findings from all parallel specialist invocations.
+    Expected keys: subtask_id, subtask_description, container, service_context,
+    system_prompt (injected by builder from profile YAML).
     """
     finding = LogAgent().run_docker(
         subtask_id=state["subtask_id"],
         subtask_description=state["subtask_description"],
         container=state["container"],
         service_context=state.get("service_context", {}),
+        system_prompt=state.get("system_prompt", ""),
     )
     return {"current_cycle_findings": [finding]}
 

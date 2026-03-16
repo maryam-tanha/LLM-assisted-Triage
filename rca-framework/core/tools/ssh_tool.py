@@ -2,7 +2,7 @@ import os
 
 import paramiko
 
-from config.models import SSHConfig
+from framework.models import SSHConfig
 
 
 class SSHExecutionError(Exception):

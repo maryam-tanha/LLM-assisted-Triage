@@ -4,42 +4,45 @@ ui.py — Streamlit Observability UI for the RCA Framework
 Visual layer for the LangGraph multi-agent RCA framework.
 
 Layout:
-  Sidebar  : all run inputs (config, incident ID, incident text, cycles, concurrency)
+  Sidebar  : all run inputs (profile, incident ID, incident text, cycles, concurrency)
              + live metrics once a run starts
   Center   : graph topology PNG → node status badges
-  Right    : tabbed panel — Timeline (cycle accordion) | State | RCA Report
+  Right    : tabbed panel — Timeline (cycle accordion) | State | RCA Report | Config
 
 Run from rca-framework/:
     streamlit run ui.py
 """
 
 import base64
+import io
 import os
 import sys
 import uuid
+import zipfile
 from datetime import datetime
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import URLError
 
 import streamlit as st
+import yaml
 from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).parent))
 load_dotenv(Path(__file__).parent / ".env")
 
 # ── Register specialists (triggers module-level register() calls) ───────────────
-import agents.specialists.log_agent           # noqa: F401
-import agents.specialists.runtime_status_agent  # noqa: F401
+import core.agents.specialists.log_agent           # noqa: F401
+import core.agents.specialists.runtime_status_agent  # noqa: F401
 
-from config.loader import load_config
-from graph.builder import build_graph
-from graph.registry import get_all
-from graph.state import CycleSummary, GraphState, SpecialistFinding, Subtask
+from framework.loader import load_profile, list_profiles
+from core.graph.builder import build_graph
+from core.graph.registry import get_all
+from core.graph.state import CycleSummary, GraphState, SpecialistFinding, Subtask
 
 # ── Constants ──────────────────────────────────────────────────────────────────
-CONFIGS_DIR = Path(__file__).parent / "configs"
-CONFIG_FILES = {p.stem: p for p in sorted(CONFIGS_DIR.glob("*.yaml"))}
+PROFILES_DIR = Path(__file__).parent / "profiles"
+PROFILES = list_profiles(PROFILES_DIR)
 
 DEFAULT_INCIDENT = (
     "Users are reporting that the voting page loads but votes don't seem to be "
@@ -167,10 +170,10 @@ def _mermaid_source_to_png(mermaid_source: str) -> bytes | None:
 
 
 # ── Graph loader (cached in session state) ─────────────────────────────────────
-def _load_graph(cfg_name: str) -> None:
-    if st.session_state.loaded_cfg == cfg_name:
+def _load_graph(profile_name: str) -> None:
+    if st.session_state.loaded_cfg == profile_name:
         return
-    config = load_config(CONFIG_FILES[cfg_name])
+    config = load_profile(PROFILES[profile_name])
     graph = build_graph(config)
     mermaid_source = _build_mermaid_source()
     png = _mermaid_source_to_png(mermaid_source)
@@ -178,7 +181,7 @@ def _load_graph(cfg_name: str) -> None:
     st.session_state.graph = graph
     st.session_state.graph_png = png
     st.session_state.graph_mermaid_source = mermaid_source
-    st.session_state.loaded_cfg = cfg_name
+    st.session_state.loaded_cfg = profile_name
     st.session_state.node_status = {
         n: "idle"
         for n in graph.get_graph().nodes
@@ -188,16 +191,16 @@ def _load_graph(cfg_name: str) -> None:
 
 # ── Sidebar — ALL inputs live here ────────────────────────────────────────────
 def _sidebar() -> tuple[str, str, str, int, int, bool]:
-    """Returns (cfg_name, incident_id, incident, max_cycles, max_concurrency, run_clicked)."""
+    """Returns (profile_name, incident_id, incident, max_cycles, max_concurrency, run_clicked)."""
     with st.sidebar:
         st.title("🔍 RCA Framework")
         st.caption("LangGraph · Multi-Agent Observability")
         st.divider()
 
         cfg = st.selectbox(
-            "Service Config",
-            list(CONFIG_FILES.keys()),
-            help="YAML file from configs/ describing the target services",
+            "Profile",
+            list(PROFILES.keys()),
+            help="Profile directory from profiles/ describing the target product",
         )
 
         incident_id = st.text_input(
@@ -269,7 +272,7 @@ def _badges_html() -> str:
     return "".join(parts) or "<span style='color:#6b7280'>No nodes loaded.</span>"
 
 
-# ── Cycle-grouped accordion (Option C) ────────────────────────────────────────
+# ── Cycle-grouped accordion ────────────────────────────────────────────────────
 def _cycle_of_finding(f: SpecialistFinding) -> int:
     """Extract cycle number from subtask_id like 'c1-task-007'."""
     try:
@@ -377,12 +380,6 @@ def _render_cycle_timeline() -> None:
             for f in cycle_findings:
                 pct = int(f.confidence * 100)
                 conf_color = "#059669" if pct >= 70 else "#d97706" if pct >= 40 else "#6b7280"
-                f_label = (
-                    f"`{f.agent_type}` · "
-                    f"<span style='color:{conf_color}'>{pct}%</span> · "
-                    f"`{f.subtask_id}`"
-                )
-                # st.expander doesn't support HTML in label; use plain text
                 f_label_plain = f"{f.agent_type} · {pct}% · {f.subtask_id}"
                 with st.expander(f_label_plain, expanded=False):
                     _render_finding_inline(f)
@@ -441,14 +438,134 @@ def _render_state_tab() -> None:
                 )
 
 
-# ── Right panel: static (tabs Timeline | State | RCA Report) ──────────────────
+# ── Config tab helpers ──────────────────────────────────────────────────────────
+
+def _zip_profile(profile_path: Path) -> bytes:
+    """Create a ZIP of the entire profile directory."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in profile_path.rglob("*"):
+            if f.is_file():
+                zf.write(f, f.relative_to(profile_path.parent))
+    return buf.getvalue()
+
+
+def _save_yaml_and_reload(file_path: Path, content: str, profile_path: Path) -> None:
+    """Validate YAML, write to disk, reload profile and graph."""
+    try:
+        yaml.safe_load(content)
+    except yaml.YAMLError as e:
+        st.error(f"Invalid YAML: {e}")
+        return
+    file_path.write_text(content, encoding="utf-8")
+    try:
+        config = load_profile(profile_path)
+        graph = build_graph(config)
+        mermaid_source = _build_mermaid_source()
+        png = _mermaid_source_to_png(mermaid_source)
+        st.session_state.config = config
+        st.session_state.graph = graph
+        st.session_state.graph_png = png
+        st.session_state.graph_mermaid_source = mermaid_source
+        st.session_state.loaded_cfg = profile_path.name
+        st.success(f"Saved and reloaded: {file_path.name}")
+        st.rerun()
+    except Exception as e:
+        st.error(f"Reload failed after save: {e}")
+
+
+def _render_config_tab() -> None:
+    """YAML editors for all files in the active profile."""
+    if st.session_state.running:
+        st.info("Config editing is disabled while a run is in progress.")
+        return
+
+    config = st.session_state.config
+    if config is None or config.profile_path is None:
+        st.caption("Load a profile first.")
+        return
+
+    profile_path: Path = config.profile_path
+
+    # ── ZIP download / upload ─────────────────────────────────────────────────
+    col1, col2 = st.columns(2)
+    with col1:
+        st.download_button(
+            "⬇ Download Profile ZIP",
+            data=_zip_profile(profile_path),
+            file_name=f"{profile_path.name}.zip",
+            mime="application/zip",
+            use_container_width=True,
+        )
+    with col2:
+        uploaded = st.file_uploader(
+            "Upload ZIP", type=["zip"], label_visibility="collapsed",
+            help="Upload a profile ZIP to replace the current profile",
+        )
+        if uploaded is not None:
+            if st.button("Apply Uploaded ZIP", use_container_width=True):
+                try:
+                    with zipfile.ZipFile(io.BytesIO(uploaded.read())) as zf:
+                        zf.extractall(PROFILES_DIR)
+                    st.success("Profile uploaded. Reload the page to see changes.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Upload failed: {e}")
+
+    st.divider()
+
+    # ── profile.yaml ──────────────────────────────────────────────────────────
+    profile_yaml_path = profile_path / "profile.yaml"
+    with st.expander("Product Config (profile.yaml)", expanded=False):
+        raw = profile_yaml_path.read_text(encoding="utf-8")
+        edited = st.text_area(
+            "profile.yaml", value=raw, height=300, key="edit_profile_yaml",
+            label_visibility="collapsed",
+        )
+        if st.button("Save Product Config", key="save_profile_yaml"):
+            _save_yaml_and_reload(profile_yaml_path, edited, profile_path)
+
+    # ── Agent configs ─────────────────────────────────────────────────────────
+    agents_dir = profile_path / "agents"
+    if agents_dir.exists():
+        st.markdown("**Agent Configs + Prompts**")
+        for f in sorted(agents_dir.glob("*.yaml")):
+            with st.expander(f.stem, expanded=False):
+                raw = f.read_text(encoding="utf-8")
+                edited = st.text_area(
+                    f.name, value=raw, height=420, key=f"edit_agent_{f.stem}",
+                    label_visibility="collapsed",
+                )
+                if st.button(f"Save {f.stem}", key=f"save_agent_{f.stem}"):
+                    _save_yaml_and_reload(f, edited, profile_path)
+
+    # ── Framework prompts ─────────────────────────────────────────────────────
+    st.markdown("**Framework Prompts**")
+    for fname, label in [
+        ("parent.yaml", "Parent Agent Prompt"),
+        ("synthesis.yaml", "Synthesis Agent Prompt"),
+    ]:
+        fpath = profile_path / fname
+        if fpath.exists():
+            with st.expander(label, expanded=False):
+                raw = fpath.read_text(encoding="utf-8")
+                edited = st.text_area(
+                    fname, value=raw, height=420, key=f"edit_{fname}",
+                    label_visibility="collapsed",
+                )
+                if st.button(f"Save {label}", key=f"save_{fname}"):
+                    _save_yaml_and_reload(fpath, edited, profile_path)
+
+
+# ── Right panel: static (tabs Timeline | State | RCA Report | Config) ─────────
 def render_right_panel_static() -> None:
-    """Unified right panel: cycle-grouped Timeline accordion + State + RCA Report."""
+    """Unified right panel: cycle-grouped Timeline accordion + State + RCA Report + Config."""
     has_report = bool(st.session_state.final_report)
 
     tab_labels = ["Timeline", "State"]
     if has_report:
         tab_labels.append("RCA Report")
+    tab_labels.append("Config")
     tabs = st.tabs(tab_labels)
 
     with tabs[0]:
@@ -457,9 +574,14 @@ def render_right_panel_static() -> None:
     with tabs[1]:
         _render_state_tab()
 
+    idx = 2
     if has_report:
-        with tabs[2]:
+        with tabs[idx]:
             st.markdown(st.session_state.final_report)
+        idx += 1
+
+    with tabs[idx]:
+        _render_config_tab()
 
 
 # ── Right panel: live (during streaming — cycle timeline + compact state) ───────
@@ -637,7 +759,7 @@ def _run_stream(
 def main() -> None:
     cfg_name, incident_id, incident, max_cycles, max_concurrency, run_clicked = _sidebar()
 
-    if CONFIG_FILES:
+    if PROFILES:
         _load_graph(cfg_name)
 
     center, right = st.columns([11, 9])
@@ -657,7 +779,7 @@ def main() -> None:
                     language="text",
                 )
             else:
-                st.caption("Select a config to load the graph.")
+                st.caption("Select a profile to load the graph.")
 
         st.markdown('<div class="section-label">Node Status</div>', unsafe_allow_html=True)
         status_placeholder = st.empty()

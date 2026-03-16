@@ -1,7 +1,7 @@
 """
 Tests for:
   - AgentConfig model and parent_llm_description()
-  - load_config loading agent YAML files
+  - load_profile loading agent YAML files
   - RuntimeStatusAgent basic properties
   - runtime_status_specialist_node LangGraph interface
 """
@@ -11,20 +11,21 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agents.specialists.runtime_status_agent import (
+from core.agents.specialists.runtime_status_agent import (
     RuntimeStatusAgent,
     runtime_status_specialist_node,
 )
-from config.loader import AgentConfig, load_config
-from graph.state import SpecialistFinding
-from security.allowlist import CommandAllowlist
+from framework.loader import load_profile
+from framework.models import AgentConfig
+from core.graph.state import SpecialistFinding
+from core.security.allowlist import CommandAllowlist
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-CONFIG_PATH = Path(__file__).parent.parent / "configs" / "voting_app.yaml"
+PROFILE_DIR = Path(__file__).parent.parent / "profiles" / "voting_app"
 
 
 def _make_finding(**kwargs) -> SpecialistFinding:
@@ -92,62 +93,68 @@ class TestAgentConfig:
 
 
 # ---------------------------------------------------------------------------
-# TestLoadConfigAgents
+# TestLoadProfileAgents
 # ---------------------------------------------------------------------------
 
 
-class TestLoadConfigAgents:
+class TestLoadProfileAgents:
     def test_agents_loaded_from_yaml(self):
-        config = load_config(CONFIG_PATH)
+        config = load_profile(PROFILE_DIR)
         assert len(config.agents) == 2
         agent_types = {a.agent_type for a in config.agents}
         assert "log" in agent_types
         assert "runtime_status" in agent_types
 
     def test_log_agent_has_description(self):
-        config = load_config(CONFIG_PATH)
+        config = load_profile(PROFILE_DIR)
         log_agent = config.get_agent("log")
         assert log_agent is not None
         assert len(log_agent.description.strip()) > 0
 
     def test_runtime_agent_has_description(self):
-        config = load_config(CONFIG_PATH)
+        config = load_profile(PROFILE_DIR)
         rt_agent = config.get_agent("runtime_status")
         assert rt_agent is not None
         assert len(rt_agent.description.strip()) > 0
 
     def test_runtime_agent_has_when_to_use(self):
-        config = load_config(CONFIG_PATH)
+        config = load_profile(PROFILE_DIR)
         rt_agent = config.get_agent("runtime_status")
         assert rt_agent is not None
         assert rt_agent.when_to_use.strip() != ""
 
     def test_get_agent_unknown_returns_none(self):
-        config = load_config(CONFIG_PATH)
+        config = load_profile(PROFILE_DIR)
         assert config.get_agent("nonexistent") is None
 
     def test_parent_llm_description_includes_when_to_use(self):
-        config = load_config(CONFIG_PATH)
+        config = load_profile(PROFILE_DIR)
         rt_agent = config.get_agent("runtime_status")
         assert rt_agent is not None
         desc = rt_agent.parent_llm_description()
         assert "When to use" in desc
 
-    def test_missing_agent_yaml_raises(self, tmp_path):
-        main_yaml = tmp_path / "product.yaml"
-        main_yaml.write_text(
-            "product: Test\naccess_method: docker_exec\n"
-            "agents:\n  - agents/missing.yaml\nservices: []\n"
-        )
-        with pytest.raises(FileNotFoundError, match="missing.yaml"):
-            load_config(main_yaml)
+    def test_runtime_agent_has_system_prompt(self):
+        config = load_profile(PROFILE_DIR)
+        rt_agent = config.get_agent("runtime_status")
+        assert rt_agent is not None
+        assert rt_agent.system_prompt.strip() != ""
 
-    def test_no_agents_block_defaults_to_empty(self, tmp_path):
-        main_yaml = tmp_path / "product.yaml"
-        main_yaml.write_text(
-            "product: Test\naccess_method: docker_exec\nservices: []\n"
+    def test_missing_profile_yaml_raises(self, tmp_path):
+        empty_dir = tmp_path / "no_profile"
+        empty_dir.mkdir()
+        with pytest.raises(FileNotFoundError):
+            load_profile(empty_dir)
+
+    def test_no_agents_dir_defaults_to_empty(self, tmp_path):
+        profile_dir = tmp_path / "test_profile"
+        profile_dir.mkdir()
+        (profile_dir / "profile.yaml").write_text(
+            "profile_name: test\nproduct: Test\naccess_method: docker_exec\nservices: []\n"
         )
-        config = load_config(main_yaml)
+        (profile_dir / "parent.yaml").write_text("role: parent\nsystem_prompt: 'test'\n")
+        (profile_dir / "synthesis.yaml").write_text("role: synthesis\nsystem_prompt: 'test'\n")
+        config = load_profile(profile_dir)
         assert config.agents == []
 
 
@@ -166,15 +173,6 @@ class TestRuntimeStatusAgent:
     def test_prompt_file(self):
         assert self.agent.prompt_file == "runtime_status_system.txt"
 
-    def test_prompt_file_exists(self):
-        prompt_path = (
-            Path(__file__).parent.parent
-            / "config"
-            / "prompts"
-            / self.agent.prompt_file
-        )
-        assert prompt_path.exists(), f"Prompt file missing: {prompt_path}"
-
     def test_context_commands_not_empty(self):
         assert len(self.agent.context_commands) > 0
 
@@ -190,7 +188,7 @@ class TestRuntimeStatusAgent:
 
 
 class TestRuntimeStatusSpecialistNode:
-    @patch("agents.specialists.runtime_status_agent.RuntimeStatusAgent.run_docker")
+    @patch("core.agents.specialists.runtime_status_agent.RuntimeStatusAgent.run_docker")
     def test_node_returns_reducer_compatible_dict(self, mock_run_docker):
         mock_run_docker.return_value = _make_finding()
 
@@ -208,7 +206,7 @@ class TestRuntimeStatusSpecialistNode:
         assert len(result["current_cycle_findings"]) == 1
         assert result["current_cycle_findings"][0].agent_type == "runtime_status"
 
-    @patch("agents.specialists.runtime_status_agent.RuntimeStatusAgent.run_docker")
+    @patch("core.agents.specialists.runtime_status_agent.RuntimeStatusAgent.run_docker")
     def test_node_passes_correct_arguments(self, mock_run_docker):
         mock_run_docker.return_value = _make_finding(subtask_id="t2")
 
@@ -226,9 +224,10 @@ class TestRuntimeStatusSpecialistNode:
             subtask_description="Check for OOM risk",
             container="example-voting-app-worker-1",
             service_context={"expected_behavior": "runs continuously"},
+            system_prompt="",
         )
 
-    @patch("agents.specialists.runtime_status_agent.RuntimeStatusAgent.run_docker")
+    @patch("core.agents.specialists.runtime_status_agent.RuntimeStatusAgent.run_docker")
     def test_node_uses_empty_service_context_when_missing(self, mock_run_docker):
         mock_run_docker.return_value = _make_finding()
 
