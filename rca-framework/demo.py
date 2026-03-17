@@ -38,6 +38,7 @@ for _f in sorted(_spec_dir.glob("*_agent.py")):
 
 # ── Core imports ──────────────────────────────────────────────────────────────
 from framework.loader import load_profile
+from framework import usage_tracker
 from core.graph.builder import build_graph
 from core.graph.registry import get_all
 from core.graph.state import CycleSummary, GraphState, Subtask, SpecialistFinding
@@ -223,7 +224,22 @@ def main() -> None:
 
     credits_before = fetch_openrouter_credits()
     max_concurrency = int(os.environ.get("MAX_CONCURRENCY", "10"))
-    result = graph.invoke(initial_state, config={"max_concurrency": max_concurrency})
+
+    import time as _time
+    profile_name = getattr(config, "profile_name", None) or getattr(config, "product", "unknown")
+    usage_tracker.start_run(
+        initial_state["incident_id"],
+        model=os.environ.get("LLM_MODEL", "unknown"),
+        profile=profile_name,
+    )
+    _t0 = _time.monotonic()
+    try:
+        result = graph.invoke(initial_state, config={"max_concurrency": max_concurrency})
+    finally:
+        entry = usage_tracker.finish_run(duration_s=_time.monotonic() - _t0)
+        if entry:
+            print(f"\n  Tokens  : {entry['input_tokens']:,} in / {entry['output_tokens']:,} out")
+
     credits_after = fetch_openrouter_credits()
 
     # ── 5. Print subtasks from first cycle ───────────────────────────────────

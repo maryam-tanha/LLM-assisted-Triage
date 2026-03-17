@@ -12,6 +12,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.errors import GraphRecursionError
 
 from framework.llm import get_llm
+from framework import usage_tracker
 from framework.models import SSHConfig
 from core.graph.state import SpecialistFinding
 from core.security.allowlist import CommandAllowlist
@@ -222,6 +223,13 @@ class BaseSpecialist(ABC):
                 "Consider reducing the scope of the subtask or increasing MAX_ITERATIONS.\n",
                 [],
             )
+
+        for msg in result.get("messages", []):
+            um = getattr(msg, "usage_metadata", None)
+            if um:
+                usage_tracker.record_usage(
+                    um.get("input_tokens", 0), um.get("output_tokens", 0)
+                )
 
         commands_run = [
             tc.get("args", {}).get("command", "")

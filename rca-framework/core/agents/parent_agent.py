@@ -5,6 +5,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from framework.llm import get_llm
 from framework.models import ProductConfig
+from framework import usage_tracker
 from core.graph.state import CycleSummary, Subtask
 
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
@@ -242,6 +243,10 @@ def run_parent_agent(
         )
 
     response = llm_with_tools.invoke(messages)
+
+    um = getattr(response, "usage_metadata", None)
+    if um:
+        usage_tracker.record_usage(um.get("input_tokens", 0), um.get("output_tokens", 0))
 
     if not response.tool_calls:
         # Fallback: treat as conclude with whatever text was returned

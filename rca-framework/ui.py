@@ -36,6 +36,7 @@ for _f in sorted(_spec_dir.glob("*_agent.py")):
         importlib.import_module(f"core.agents.specialists.{_f.stem}")
 
 from framework.loader import load_profile, list_profiles
+from framework import usage_tracker
 from core.graph.builder import build_graph
 from core.graph.registry import get_all
 from core.graph.state import CycleSummary, GraphState, SpecialistFinding, Subtask
@@ -43,6 +44,35 @@ from core.graph.state import CycleSummary, GraphState, SpecialistFinding, Subtas
 # ── Constants ──────────────────────────────────────────────────────────────────
 PROFILES_DIR = Path(__file__).parent / "profiles"
 PROFILES = list_profiles(PROFILES_DIR)
+
+# ── OpenRouter model list (cached 1 h) ────────────────────────────────────────
+@st.cache_data(ttl=3600, show_spinner=False)
+def _fetch_or_models() -> list[dict]:
+    """Return OpenRouter model list [{id, name, pricing:{prompt, completion}}, ...]."""
+    import json as _json
+    try:
+        api_key = os.environ.get("OPENROUTER_API_KEY", "")
+        req = Request(
+            "https://openrouter.ai/api/v1/models",
+            headers={"Authorization": f"Bearer {api_key}"},
+        )
+        with urlopen(req, timeout=8) as resp:
+            return _json.loads(resp.read()).get("data", [])
+    except Exception:
+        return []
+
+
+def _model_pricing(models: list[dict], model_id: str) -> tuple[float, float]:
+    """Return (input_price_per_token, output_price_per_token) for model_id, or (0, 0)."""
+    for m in models:
+        if m.get("id") == model_id:
+            p = m.get("pricing") or {}
+            try:
+                return float(p.get("prompt", 0)), float(p.get("completion", 0))
+            except (TypeError, ValueError):
+                return 0.0, 0.0
+    return 0.0, 0.0
+
 
 DEFAULT_INCIDENT = (
     "Users are reporting that the voting page loads but votes don't seem to be "
@@ -150,18 +180,26 @@ def _reset_run() -> None:
 
 
 # ── Hand-crafted Mermaid diagram (shows Send fan-out; LangGraph static PNG does not) ─
-def _build_mermaid_source() -> str:
-    """Build flowchart TD from specialist registry with all edges visible."""
-    registry = get_all()
+def _build_mermaid_source(graph) -> str:
+    """Build flowchart TD from the compiled graph nodes.
+
+    Uses the actual compiled graph (not the global registry) so YAML-only
+    specialists added via Profile Manager are always included.
+    """
+    specialist_nodes = sorted(
+        n for n in graph.get_graph().nodes
+        if n not in {"parent_agent", "synthesis"}
+        and not n.startswith("__")
+    )
     lines = [
         "flowchart TD",
         "  startNode([__start__]) --> parent_agent",
     ]
-    for entry in registry.values():
-        lines.append(f'  parent_agent -->|"investigate (Send)"| {entry.node_name}')
+    for node_name in specialist_nodes:
+        lines.append(f'  parent_agent -->|"investigate (Send)"| {node_name}')
     lines.append('  parent_agent -->|conclude| endNode([__end__])')
-    for entry in registry.values():
-        lines.append(f"  {entry.node_name} --> synthesis")
+    for node_name in specialist_nodes:
+        lines.append(f"  {node_name} --> synthesis")
     lines.append("  synthesis --> parent_agent")
     return "\n".join(lines)
 
@@ -179,18 +217,38 @@ def _mermaid_source_to_png(mermaid_source: str) -> bytes | None:
 
 
 # ── Graph loader (cached in session state) ─────────────────────────────────────
+def _profile_mtime(profile_name: str) -> float:
+    """Return the latest file mtime across the profile directory.
+
+    Used as a cache-bust key so adding/editing agent YAMLs triggers a graph
+    rebuild without the user having to switch profiles or restart.
+    """
+    profile_dir = PROFILES.get(profile_name)
+    if not profile_dir:
+        return 0.0
+    return max(
+        (p.stat().st_mtime for p in Path(profile_dir).rglob("*") if p.is_file()),
+        default=0.0,
+    )
+
+
 def _load_graph(profile_name: str) -> None:
-    if st.session_state.loaded_cfg == profile_name:
+    mtime = _profile_mtime(profile_name)
+    if (
+        st.session_state.loaded_cfg == profile_name
+        and st.session_state.get("loaded_cfg_mtime") == mtime
+    ):
         return
     config = load_profile(PROFILES[profile_name])
     graph = build_graph(config)
-    mermaid_source = _build_mermaid_source()
+    mermaid_source = _build_mermaid_source(graph)
     png = _mermaid_source_to_png(mermaid_source)
     st.session_state.config = config
     st.session_state.graph = graph
     st.session_state.graph_png = png
     st.session_state.graph_mermaid_source = mermaid_source
     st.session_state.loaded_cfg = profile_name
+    st.session_state.loaded_cfg_mtime = mtime
     st.session_state.node_status = {
         n: "idle"
         for n in graph.get_graph().nodes
@@ -231,6 +289,50 @@ def _sidebar() -> tuple[str, str, str, int, int, bool]:
             help="How many plan → investigate → synthesise loops before forcing a conclusion",
         )
 
+        # ── Model selector ─────────────────────────────────────────────────────
+        st.markdown("**🤖 Model**")
+        or_models = _fetch_or_models()
+        current_env_model = os.environ.get("LLM_MODEL", "")
+
+        if or_models:
+            model_ids = [m["id"] for m in or_models]
+            default_idx = model_ids.index(current_env_model) if current_env_model in model_ids else 0
+            selected_model = st.selectbox(
+                "Model",
+                model_ids,
+                index=default_idx,
+                key="_sb_model",
+                label_visibility="collapsed",
+                help="OpenRouter model to use for this investigation",
+            )
+            in_price, out_price = _model_pricing(or_models, selected_model)
+            if in_price or out_price:
+                st.caption(
+                    f"In: **${in_price * 1_000_000:.2f}**/1M · "
+                    f"Out: **${out_price * 1_000_000:.2f}**/1M tokens"
+                )
+        else:
+            # Fallback: free-text when API is unreachable
+            selected_model = st.text_input(
+                "Model", value=current_env_model, key="_sb_model",
+                label_visibility="collapsed",
+                help="OpenRouter model ID (e.g. anthropic/claude-sonnet-4-6)",
+            )
+            in_price, out_price = 0.0, 0.0
+
+        # Cost estimate from history
+        est = usage_tracker.estimate_cost(in_price, out_price, profile=cfg)
+        if est:
+            st.caption(
+                f"Est. cost ≈ **${est['estimated_cost_usd']:.3f}** "
+                f"({est['avg_input_tokens']:,} in + {est['avg_output_tokens']:,} out tok, "
+                f"avg {est['based_on_runs']} run{'s' if est['based_on_runs'] != 1 else ''})"
+            )
+        else:
+            st.caption("No history yet — cost logged after first run.")
+
+        st.divider()
+
         with st.expander("⚙️ Advanced Settings"):
             max_conc = st.number_input(
                 "Max Concurrency",
@@ -238,7 +340,6 @@ def _sidebar() -> tuple[str, str, str, int, int, bool]:
                 value=int(os.environ.get("MAX_CONCURRENCY", "10")),
                 help="Maximum specialist nodes running in parallel",
             )
-            st.caption(f"Model: `{os.environ.get('LLM_MODEL', 'openai/gpt-4.1')}`")
             st.caption(f"Specialists: `{', '.join(get_all().keys())}`")
 
         st.divider()
@@ -539,6 +640,13 @@ def _run_stream(
     inc_id = incident_id or f"inc-{uuid.uuid4().hex[:6]}"
     st.session_state.incident_id_used = inc_id
 
+    # Start token usage tracking for this run
+    selected_model = st.session_state.get("_sb_model") or os.environ.get("LLM_MODEL", "")
+    if selected_model:
+        os.environ["LLM_MODEL"] = selected_model
+    profile_name = getattr(config, "profile_name", None) or getattr(config, "product", "unknown")
+    usage_tracker.start_run(inc_id, model=selected_model, profile=profile_name)
+
     initial: GraphState = {
         "incident_id":            inc_id,
         "incident_summary":       incident,
@@ -633,7 +741,10 @@ def _run_stream(
         if st.session_state.node_status[n] == "running":
             st.session_state.node_status[n] = "done"
 
-    st.session_state.elapsed  = (datetime.now() - t0).total_seconds()
+    elapsed = (datetime.now() - t0).total_seconds()
+    usage_tracker.finish_run(duration_s=elapsed)
+
+    st.session_state.elapsed  = elapsed
     st.session_state.running  = False
     st.session_state.finished = True
     _repaint()
@@ -678,10 +789,14 @@ def main() -> None:
     if run_clicked and not st.session_state.running:
         _reset_run()
         st.session_state.running = True
-        _run_stream(
-            incident, incident_id, max_cycles, max_concurrency,
-            status_placeholder, right_panel_placeholder,
-        )
+        try:
+            _run_stream(
+                incident, incident_id, max_cycles, max_concurrency,
+                status_placeholder, right_panel_placeholder,
+            )
+        except Exception:
+            usage_tracker.finish_run(duration_s=0)
+            raise
         st.rerun()
     else:
         with right_panel_placeholder.container():
