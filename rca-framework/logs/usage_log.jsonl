@@ -1,1 +1,4 @@
 {"run_id": "inc-a941e6", "model": "openai/gpt-4.1", "profile": "voting_app", "input_tokens": 101946, "output_tokens": 9823, "started_at": "2026-03-17T11:21:57", "duration_seconds": 120.9, "finished_at": "2026-03-17T11:23:58"}
+{"run_id": "inc-07f9df", "model": "openai/gpt-4.1", "profile": "voting_app", "input_tokens": 66344, "output_tokens": 3714, "started_at": "2026-03-18T11:28:43", "duration_seconds": 48.1, "finished_at": "2026-03-18T11:29:31"}
+{"run_id": "inc-b7b8e4", "model": "openai/gpt-4.1", "profile": "voting_app", "input_tokens": 90859, "output_tokens": 6836, "started_at": "2026-03-18T11:32:13", "duration_seconds": 128.5, "finished_at": "2026-03-18T11:34:21"}
+{"run_id": "inc-2d790f", "model": "openai/gpt-4.1", "profile": "voting_app", "input_tokens": 276355, "output_tokens": 24838, "started_at": "2026-03-18T11:49:52", "duration_seconds": 180.4, "finished_at": "2026-03-18T11:52:52"}

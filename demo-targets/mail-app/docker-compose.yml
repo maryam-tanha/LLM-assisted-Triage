@@ -46,7 +46,7 @@ services:
       nofile:
         soft: 65536
         hard: 65536
-    restart: unless-stopped
+    restart: always
     healthcheck:
       test: ["CMD-SHELL", "ss -lntp | grep ':25 ' || exit 1"]
       interval: 30s
@@ -60,7 +60,7 @@ services:
   # roundcube — Webmail client UI
   # ─────────────────────────────────────────────────────────────────────
   roundcube:
-    image: roundcube/roundcubemail:1.6-apache
+    image: roundcube/roundcubemail:latest-apache
     container_name: mail-app-roundcube-1
     ports:
       - "8080:80"    # Webmail UI: http://localhost:8080
@@ -81,7 +81,7 @@ services:
         condition: service_healthy
       mailserver:
         condition: service_healthy
-    restart: unless-stopped
+    restart: always
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost/ | grep -q 'roundcube' || exit 1"]
       interval: 30s
@@ -104,7 +104,7 @@ services:
       - POSTGRES_PASSWORD=${DB_PASSWORD:-roundcube}
     volumes:
       - db-data:/var/lib/postgresql/data
-    restart: unless-stopped
+    restart: always
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-roundcube} -d ${DB_NAME:-roundcube}"]
       interval: 10s
@@ -128,7 +128,7 @@ services:
       --loglevel notice
     volumes:
       - redis-data:/data
-    restart: unless-stopped
+    restart: always
     healthcheck:
       test: ["CMD", "redis-cli", "PING"]
       interval: 10s
