@@ -1,0 +1,156 @@
+# -----------------------------------------------------------------------
+# Mail App — Docker Compose Demo Target
+# Option 3: Docker Compose Mail Stack for RCA Framework testing
+#
+# Services:
+#   mailserver  — Postfix + Dovecot (SMTP + IMAP) via docker-mailserver
+#   roundcube   — Webmail UI
+#   db          — PostgreSQL (Roundcube session/config store)
+#   redis       — Session cache for Roundcube
+#
+# Startup:
+#   1. Copy .env.example to .env and adjust if needed
+#   2. Run: docker compose up -d
+#   3. Add test accounts: bash setup.sh
+#   4. Webmail: http://localhost:8080
+# -----------------------------------------------------------------------
+
+name: mail-app
+
+services:
+
+  # ─────────────────────────────────────────────────────────────────────
+  # mailserver — Postfix (SMTP) + Dovecot (IMAP) all-in-one
+  # ─────────────────────────────────────────────────────────────────────
+  mailserver:
+    image: ghcr.io/docker-mailserver/docker-mailserver:latest
+    container_name: mail-app-mailserver-1
+    hostname: mail.example.test
+    domainname: example.test
+    env_file: mailserver.env
+    ports:
+      - "25:25"      # SMTP (receiving from external, use carefully)
+      - "587:587"    # SMTP Submission (authenticated sending)
+      - "993:993"    # IMAPS
+      - "143:143"    # IMAP (plain/STARTTLS)
+    volumes:
+      - mailserver-data:/var/mail
+      - mailserver-state:/var/mail-state
+      - mailserver-logs:/var/log/mail
+      - ./config/:/tmp/docker-mailserver/
+      - /etc/localtime:/etc/localtime:ro
+    cap_add:
+      - NET_ADMIN      # required by Postfix for certain IP table ops
+      - SYS_PTRACE
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "ss -lntp | grep ':25 ' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    networks:
+      - back-tier
+
+  # ─────────────────────────────────────────────────────────────────────
+  # roundcube — Webmail client UI
+  # ─────────────────────────────────────────────────────────────────────
+  roundcube:
+    image: roundcube/roundcubemail:1.6-apache
+    container_name: mail-app-roundcube-1
+    ports:
+      - "8080:80"    # Webmail UI: http://localhost:8080
+    environment:
+      - ROUNDCUBEMAIL_DEFAULT_HOST=ssl://mailserver
+      - ROUNDCUBEMAIL_DEFAULT_PORT=993
+      - ROUNDCUBEMAIL_SMTP_SERVER=tls://mailserver
+      - ROUNDCUBEMAIL_SMTP_PORT=587
+      - ROUNDCUBEMAIL_DB_TYPE=pgsql
+      - ROUNDCUBEMAIL_DB_HOST=db
+      - ROUNDCUBEMAIL_DB_NAME=${DB_NAME:-roundcube}
+      - ROUNDCUBEMAIL_DB_USER=${DB_USER:-roundcube}
+      - ROUNDCUBEMAIL_DB_PASSWORD=${DB_PASSWORD:-roundcube}
+      - ROUNDCUBEMAIL_SKIN=elastic
+      - ROUNDCUBEMAIL_UPLOAD_MAX_FILESIZE=25M
+    depends_on:
+      db:
+        condition: service_healthy
+      mailserver:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost/ | grep -q 'roundcube' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - front-tier
+      - back-tier
+
+  # ─────────────────────────────────────────────────────────────────────
+  # db — PostgreSQL for Roundcube persistent storage
+  # ─────────────────────────────────────────────────────────────────────
+  db:
+    image: postgres:15-alpine
+    container_name: mail-app-db-1
+    environment:
+      - POSTGRES_DB=${DB_NAME:-roundcube}
+      - POSTGRES_USER=${DB_USER:-roundcube}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-roundcube}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-roundcube} -d ${DB_NAME:-roundcube}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - back-tier
+
+  # ─────────────────────────────────────────────────────────────────────
+  # redis — Session cache for Roundcube
+  # ─────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: mail-app-redis-1
+    command: >
+      redis-server
+      --maxmemory 128mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1
+      --loglevel notice
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "PING"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - back-tier
+
+volumes:
+  mailserver-data:
+    name: mail-app_mailserver-data
+  mailserver-state:
+    name: mail-app_mailserver-state
+  mailserver-logs:
+    name: mail-app_mailserver-logs
+  db-data:
+    name: mail-app_db-data
+  redis-data:
+    name: mail-app_redis-data
+
+networks:
+  front-tier:
+    name: mail-app_front-tier
+  back-tier:
+    name: mail-app_back-tier

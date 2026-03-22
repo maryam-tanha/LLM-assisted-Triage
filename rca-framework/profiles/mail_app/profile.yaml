@@ -1,0 +1,196 @@
+# -----------------------------------------------------------------------
+# Profile: mail_app
+# -----------------------------------------------------------------------
+# Docker Compose mail stack for RCA Framework testing.
+# Target: demo-targets/mail-app/docker-compose.yml
+# -----------------------------------------------------------------------
+
+profile_name: mail_app
+product: MailApp
+access_method: docker_exec
+
+services:
+
+  - service_name: mailserver
+    description: >
+      All-in-one mail server running Postfix (SMTP) and Dovecot (IMAP)
+      via docker-mailserver. Handles inbound/outbound mail delivery and
+      mailbox access for all test accounts.
+    container: mail-app-mailserver-1
+    host_port: 8025
+    internal_port: 25
+    networks:
+      - back-tier
+    expected_behavior: |
+      Postfix listens on port 25 (SMTP) and 587 (submission).
+      Dovecot listens on port 993 (IMAPS) and 143 (IMAP).
+      Healthcheck: ss -lntp | grep ':25' returns a result.
+      Mail queue should be near-empty under normal load (mailq shows 0 messages).
+      Authentication via username/password for all test accounts.
+      Logs written to /var/log/mail/mail.log inside the container.
+    known_failures:
+      - pattern: "postfix/smtp.*Connection refused"
+        likely_cause: "Downstream relay rejected connection or destination host unreachable"
+      - pattern: "postfix/qmgr.*queue file size limit exceeded"
+        likely_cause: "Message exceeds POSTFIX_MESSAGE_SIZE_LIMIT (default 25MB)"
+      - pattern: "dovecot.*Fatal: Error in configuration"
+        likely_cause: "Dovecot config corrupt or incompatible options in /tmp/docker-mailserver/"
+      - pattern: "postfix/smtpd.*SASL authentication failure"
+        likely_cause: "Wrong password or account does not exist — check via: setup email list"
+      - pattern: "warning: hostname .* does not resolve"
+        likely_cause: "DNS not configured for mail.example.test — expected in test env"
+      - pattern: "postfix/master.*daemon started"
+        likely_cause: "Postfix restarted — check for upstream config change or crash"
+      - pattern: "Too many connections"
+        likely_cause: "Dovecot connection limit hit — check max_connections config"
+    context_commands:
+      - "mailq"
+      - "postfix status"
+      - "postconf mail_version"
+      - "postconf inet_interfaces"
+      - "postconf message_size_limit"
+      - "postconf mailbox_size_limit"
+      - "doveadm stats dump"
+      - "doveadm who"
+      - "df -h"
+      - "free -m"
+      - "ps aux | grep -E 'postfix|dovecot|master'"
+      - "uptime"
+    log_hints:
+      - "Primary log is at /var/log/mail/mail.log — use: tail -n 100 /var/log/mail/mail.log"
+      - "Postfix logs: grep 'postfix/' /var/log/mail/mail.log | tail -50"
+      - "Dovecot logs: grep 'dovecot' /var/log/mail/mail.log | tail -50"
+      - "Queue inspection: mailq — empty output means no stuck messages."
+      - "Check SASL auth failures: grep 'SASL' /var/log/mail/mail.log | tail -20"
+      - "Check delivery failures: grep 'status=bounced\\|status=deferred' /var/log/mail/mail.log | tail -20"
+      - "Active connections: doveadm who (shows logged-in IMAP sessions)"
+    additional_info:
+      owner: infra-team
+      dependencies: []
+      technology: docker-mailserver (Postfix + Dovecot)
+      image: ghcr.io/docker-mailserver/docker-mailserver:latest
+
+  - service_name: roundcube
+    description: >
+      PHP webmail client that provides browser-based access to mailboxes.
+      Connects to mailserver via IMAP (993) for reading and SMTP (587) for sending.
+      Uses PostgreSQL for contact/session persistence.
+    container: mail-app-roundcube-1
+    host_port: 8080
+    internal_port: 80
+    networks:
+      - front-tier
+      - back-tier
+    expected_behavior: |
+      Serves HTTP on port 80 (mapped to host :8080).
+      Healthcheck: curl http://localhost/ returns HTML containing 'roundcube'.
+      Successful IMAP login to mailserver on port 993 (SSL).
+      Successful SMTP relay to mailserver on port 587 (STARTTLS).
+      Connects to PostgreSQL (db:5432) for session and contacts storage.
+    known_failures:
+      - pattern: "IMAP Error: Login failed"
+        likely_cause: "Wrong credentials or mailserver SASL misconfiguration"
+      - pattern: "Connection to storage server failed"
+        likely_cause: "mailserver IMAP port 993 unreachable — mailserver may be down"
+      - pattern: "DB Error: Unable to connect"
+        likely_cause: "PostgreSQL (db container) is down or credentials mismatch"
+      - pattern: "SMTP Error: Could not connect to SMTP host"
+        likely_cause: "mailserver port 587 is closed or TLS handshake failing"
+      - pattern: "PHP Fatal error"
+        likely_cause: "Roundcube PHP runtime error — check Apache error log"
+    context_commands:
+      - "cat /var/www/html/logs/errors.log 2>/dev/null | tail -50 || echo 'No error log found'"
+      - "cat /etc/roundcube/config.inc.php | grep -E 'default_host|smtp_server|db_dsnw'"
+      - "curl -s -o /dev/null -w '%{http_code}' http://localhost/"
+      - "df -h"
+      - "free -m"
+      - "ps aux | grep apache"
+      - "uptime"
+    log_hints:
+      - "PHP/Apache errors: cat /var/www/html/logs/errors.log | tail -50"
+      - "If curl http://localhost/ returns non-200, Apache is down — check ps aux."
+      - "Roundcube config: cat /etc/roundcube/config.inc.php to verify IMAP/SMTP host and DB DSN."
+      - "IMAP connection failures appear as 'IMAP Error' in errors.log — correlate with mailserver logs."
+    additional_info:
+      owner: frontend-team
+      dependencies: [mailserver, db]
+      technology: PHP / Roundcube / Apache
+      image: roundcube/roundcubemail:1.6-apache
+
+  - service_name: db
+    description: >
+      PostgreSQL database used by Roundcube to persist user preferences,
+      contacts, identities, and session data.
+    container: mail-app-db-1
+    host_port: null
+    internal_port: 5432
+    networks:
+      - back-tier
+    expected_behavior: |
+      Listens on port 5432. Healthcheck: pg_isready -U roundcube returns success.
+      Database: roundcube. User: roundcube.
+      Roundcube auto-initialises its schema on first startup.
+    known_failures:
+      - pattern: "FATAL: too many connections"
+        likely_cause: "Connection pool exhausted from Roundcube"
+      - pattern: "FATAL: password authentication failed for user"
+        likely_cause: "Credentials mismatch between db and roundcube environment variables"
+      - pattern: "could not access file"
+        likely_cause: "Disk full or volume mount issue"
+    context_commands:
+      - "psql -U roundcube -d roundcube -c '\\dt'"
+      - "psql -U roundcube -d roundcube -c 'SELECT COUNT(*) FROM users;'"
+      - "psql -U roundcube -d roundcube -c 'SELECT version();'"
+      - "df -h"
+      - "free -m"
+      - "ps aux"
+      - "uptime"
+    log_hints:
+      - "psql -U roundcube -d roundcube -c '\\dt' — if no tables, Roundcube never initialised the schema."
+      - "psql -U roundcube -d roundcube -c 'SELECT COUNT(*) FROM users;' — confirms DB connectivity and user records."
+      - "df -h checks available disk — a full volume prevents PostgreSQL writes."
+    additional_info:
+      owner: infra-team
+      dependencies: []
+      technology: PostgreSQL 15 (Alpine)
+      image: postgres:15-alpine
+      credentials:
+        user: roundcube
+        password: roundcube
+
+  - service_name: redis
+    description: >
+      Redis in-memory store used by Roundcube as a session cache.
+      Stores active web sessions to reduce PostgreSQL load.
+    container: mail-app-redis-1
+    host_port: null
+    internal_port: 6379
+    networks:
+      - back-tier
+    expected_behavior: |
+      Listens on port 6379. Healthcheck: redis-cli PING returns PONG.
+      maxmemory: 128MB with allkeys-lru eviction.
+      Under normal usage, connected_clients should be >= 1 (Roundcube).
+    known_failures:
+      - pattern: "OOM command not allowed when used memory > 'maxmemory'"
+        likely_cause: "Session data accumulated beyond 128MB limit — check connected clients"
+      - pattern: "MISCONF Redis is configured to save RDB snapshots"
+        likely_cause: "Disk full or permission issue on /data volume"
+    context_commands:
+      - "redis-cli PING"
+      - "redis-cli INFO server"
+      - "redis-cli INFO memory"
+      - "redis-cli INFO clients"
+      - "redis-cli INFO stats"
+      - "redis-cli DBSIZE"
+      - "df -h"
+      - "free -m"
+    log_hints:
+      - "redis-cli PING must return PONG — any other response means Redis is unhealthy."
+      - "redis-cli INFO memory shows used_memory vs maxmemory — check for eviction pressure."
+      - "redis-cli INFO clients shows connected_clients — expect >= 1 from Roundcube."
+    additional_info:
+      owner: infra-team
+      dependencies: []
+      technology: Redis 7 (Alpine)
+      image: redis:7-alpine
