@@ -50,7 +50,6 @@ services:
       - "postconf inet_interfaces"
       - "postconf message_size_limit"
       - "postconf mailbox_size_limit"
-      - "doveadm stats dump"
       - "doveadm who"
       - "df -h"
       - "free -m"
@@ -100,7 +99,7 @@ services:
         likely_cause: "Roundcube PHP runtime error — check Apache error log"
     context_commands:
       - "cat /var/www/html/logs/errors.log 2>/dev/null | tail -50 || echo 'No error log found'"
-      - "cat /etc/roundcube/config.inc.php | grep -E 'default_host|smtp_server|db_dsnw'"
+      - "cat /var/www/html/config/config.inc.php | grep -E 'default_host|smtp_server|db_dsnw'"
       - "curl -s -o /dev/null -w '%{http_code}' http://localhost/"
       - "df -h"
       - "free -m"
@@ -109,7 +108,7 @@ services:
     log_hints:
       - "PHP/Apache errors: cat /var/www/html/logs/errors.log | tail -50"
       - "If curl http://localhost/ returns non-200, Apache is down — check ps aux."
-      - "Roundcube config: cat /etc/roundcube/config.inc.php to verify IMAP/SMTP host and DB DSN."
+      - "Roundcube config: cat /var/www/html/config/config.inc.php to verify IMAP/SMTP host and DB DSN."
       - "IMAP connection failures appear as 'IMAP Error' in errors.log — correlate with mailserver logs."
     additional_info:
       owner: frontend-team
