@@ -22,6 +22,13 @@ from datetime import datetime
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import URLError
+import logging
+
+logging.basicConfig(
+    filename='rca_execution.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 import streamlit as st
 from dotenv import load_dotenv

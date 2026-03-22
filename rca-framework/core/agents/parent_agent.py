@@ -241,8 +241,14 @@ def run_parent_agent(
                 )
             )
         )
-
+    import time
+    t0 = time.time()
     response = llm_with_tools.invoke(messages)
+    duration = time.time() - t0
+    
+    import logging
+    logger = logging.getLogger("ParentAgent")
+    logger.info(f"Parent LLM planning completed in {duration:.2f}s")
 
     um = getattr(response, "usage_metadata", None)
     if um:

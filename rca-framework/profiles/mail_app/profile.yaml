@@ -7,7 +7,10 @@
 
 profile_name: mail_app
 product: MailApp
-access_method: docker_exec
+access_method: ssh
+ssh_host: 16.174.20.34
+ssh_user: ubuntu
+ssh_key_path: P:\LLM-RCA-Reasearch\Keys\mail-server-kalhar-laptop.pem
 
 services:
 
@@ -28,6 +31,8 @@ services:
       Mail queue should be near-empty under normal load (mailq shows 0 messages).
       Authentication via username/password for all test accounts.
       Logs written to /var/log/mail/mail.log inside the container.
+      Note: Container runs on a host with only 414MB RAM and heavily relies on swap.
+      Base disk usage on the overlay filesystem is around ~85%. Do not treat these baselines as novel anomalies.
     known_failures:
       - pattern: "postfix/smtp.*Connection refused"
         likely_cause: "Downstream relay rejected connection or destination host unreachable"
@@ -43,26 +48,30 @@ services:
         likely_cause: "Postfix restarted — check for upstream config change or crash"
       - pattern: "Too many connections"
         likely_cause: "Dovecot connection limit hit — check max_connections config"
+      - pattern: "OOMKilled|Out of memory|Resource exhaustion"
+        likely_cause: "ROUTINE SYMPTOM: VM only has 414MB RAM. Heavy swap and occasional memory kills are a known baseline issue."
+      - pattern: "No space left on device|disk full"
+        likely_cause: "ROUTINE SYMPTOM: Disk overlay sits at 85% capacity natively. Minor spikes cause temporary full-disk errors."
     context_commands:
-      - "mailq"
-      - "postfix status"
-      - "postconf mail_version"
-      - "postconf inet_interfaces"
-      - "postconf message_size_limit"
-      - "postconf mailbox_size_limit"
-      - "doveadm who"
-      - "df -h"
-      - "free -m"
-      - "ps aux | grep -E 'postfix|dovecot|master'"
-      - "uptime"
+      - "sudo docker exec mail-app-mailserver-1 mailq"
+      - "sudo docker exec mail-app-mailserver-1 postfix status"
+      - "sudo docker exec mail-app-mailserver-1 postconf mail_version"
+      - "sudo docker exec mail-app-mailserver-1 postconf inet_interfaces"
+      - "sudo docker exec mail-app-mailserver-1 postconf message_size_limit"
+      - "sudo docker exec mail-app-mailserver-1 postconf mailbox_size_limit"
+      - "sudo docker exec mail-app-mailserver-1 doveadm who"
+      - "sudo docker exec mail-app-mailserver-1 df -h"
+      - "sudo docker exec mail-app-mailserver-1 free -m"
+      - "sudo docker exec mail-app-mailserver-1 sh -c \"ps aux | grep -E 'postfix|dovecot|master'\""
+      - "sudo docker exec mail-app-mailserver-1 uptime"
     log_hints:
-      - "Primary log is at /var/log/mail/mail.log — use: tail -n 100 /var/log/mail/mail.log"
-      - "Postfix logs: grep 'postfix/' /var/log/mail/mail.log | tail -50"
-      - "Dovecot logs: grep 'dovecot' /var/log/mail/mail.log | tail -50"
-      - "Queue inspection: mailq — empty output means no stuck messages."
-      - "Check SASL auth failures: grep 'SASL' /var/log/mail/mail.log | tail -20"
-      - "Check delivery failures: grep 'status=bounced\\|status=deferred' /var/log/mail/mail.log | tail -20"
-      - "Active connections: doveadm who (shows logged-in IMAP sessions)"
+      - "Primary log is at /var/log/mail/mail.log — use: sudo docker exec mail-app-mailserver-1 tail -n 100 /var/log/mail/mail.log"
+      - "Postfix logs: sudo docker exec mail-app-mailserver-1 sh -c \"grep 'postfix/' /var/log/mail/mail.log | tail -50\""
+      - "Dovecot logs: sudo docker exec mail-app-mailserver-1 sh -c \"grep 'dovecot' /var/log/mail/mail.log | tail -50\""
+      - "Queue inspection: sudo docker exec mail-app-mailserver-1 mailq"
+      - "Check SASL auth failures: sudo docker exec mail-app-mailserver-1 sh -c \"grep 'SASL' /var/log/mail/mail.log | tail -20\""
+      - "Check delivery failures: sudo docker exec mail-app-mailserver-1 sh -c \"grep 'status=bounced\\|status=deferred' /var/log/mail/mail.log | tail -20\""
+      - "Active connections: sudo docker exec mail-app-mailserver-1 doveadm who"
     additional_info:
       owner: infra-team
       dependencies: []
@@ -98,13 +107,13 @@ services:
       - pattern: "PHP Fatal error"
         likely_cause: "Roundcube PHP runtime error — check Apache error log"
     context_commands:
-      - "cat /var/www/html/logs/errors.log 2>/dev/null | tail -50 || echo 'No error log found'"
-      - "cat /var/www/html/config/config.inc.php | grep -E 'default_host|smtp_server|db_dsnw'"
-      - "curl -s -o /dev/null -w '%{http_code}' http://localhost/"
-      - "df -h"
-      - "free -m"
-      - "ps aux | grep apache"
-      - "uptime"
+      - "sudo docker exec mail-app-roundcube-1 sh -c \"cat /var/www/html/logs/errors.log 2>/dev/null | tail -50 || echo 'No error log found'\""
+      - "sudo docker exec mail-app-roundcube-1 sh -c \"cat /var/www/html/config/config.inc.php | grep -E 'default_host|smtp_server|db_dsnw'\""
+      - "sudo docker exec mail-app-roundcube-1 curl -s -o /dev/null -w '%{http_code}' http://localhost/"
+      - "sudo docker exec mail-app-roundcube-1 df -h"
+      - "sudo docker exec mail-app-roundcube-1 free -m"
+      - "sudo docker exec mail-app-roundcube-1 sh -c \"ps aux | grep apache\""
+      - "sudo docker exec mail-app-roundcube-1 uptime"
     log_hints:
       - "PHP/Apache errors: cat /var/www/html/logs/errors.log | tail -50"
       - "If curl http://localhost/ returns non-200, Apache is down — check ps aux."
@@ -137,13 +146,13 @@ services:
       - pattern: "could not access file"
         likely_cause: "Disk full or volume mount issue"
     context_commands:
-      - "psql -U roundcube -d roundcube -c '\\dt'"
-      - "psql -U roundcube -d roundcube -c 'SELECT COUNT(*) FROM users;'"
-      - "psql -U roundcube -d roundcube -c 'SELECT version();'"
-      - "df -h"
-      - "free -m"
-      - "ps aux"
-      - "uptime"
+      - "sudo docker exec mail-app-db-1 psql -U roundcube -d roundcube -c '\\dt'"
+      - "sudo docker exec mail-app-db-1 psql -U roundcube -d roundcube -c 'SELECT COUNT(*) FROM users;'"
+      - "sudo docker exec mail-app-db-1 psql -U roundcube -d roundcube -c 'SELECT version();'"
+      - "sudo docker exec mail-app-db-1 df -h"
+      - "sudo docker exec mail-app-db-1 free -m"
+      - "sudo docker exec mail-app-db-1 ps aux"
+      - "sudo docker exec mail-app-db-1 uptime"
     log_hints:
       - "psql -U roundcube -d roundcube -c '\\dt' — if no tables, Roundcube never initialised the schema."
       - "psql -U roundcube -d roundcube -c 'SELECT COUNT(*) FROM users;' — confirms DB connectivity and user records."
@@ -176,14 +185,14 @@ services:
       - pattern: "MISCONF Redis is configured to save RDB snapshots"
         likely_cause: "Disk full or permission issue on /data volume"
     context_commands:
-      - "redis-cli PING"
-      - "redis-cli INFO server"
-      - "redis-cli INFO memory"
-      - "redis-cli INFO clients"
-      - "redis-cli INFO stats"
-      - "redis-cli DBSIZE"
-      - "df -h"
-      - "free -m"
+      - "sudo docker exec mail-app-redis-1 redis-cli PING"
+      - "sudo docker exec mail-app-redis-1 redis-cli INFO server"
+      - "sudo docker exec mail-app-redis-1 redis-cli INFO memory"
+      - "sudo docker exec mail-app-redis-1 redis-cli INFO clients"
+      - "sudo docker exec mail-app-redis-1 redis-cli INFO stats"
+      - "sudo docker exec mail-app-redis-1 redis-cli DBSIZE"
+      - "sudo docker exec mail-app-redis-1 df -h"
+      - "sudo docker exec mail-app-redis-1 free -m"
     log_hints:
       - "redis-cli PING must return PONG — any other response means Redis is unhealthy."
       - "redis-cli INFO memory shows used_memory vs maxmemory — check for eviction pressure."

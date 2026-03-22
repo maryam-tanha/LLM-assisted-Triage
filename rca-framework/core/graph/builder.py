@@ -83,13 +83,22 @@ def build_graph(product_config: ProductConfig):
         if _agent_cfg.agent_type not in registry:
             def _make_node(ac):
                 def node_fn(state: dict) -> dict:
-                    finding = YAMLSpecialist(ac).run_docker(
-                        subtask_id=state["subtask_id"],
-                        subtask_description=state["subtask_description"],
-                        container=state["container"],
-                        service_context=state["service_context"],
-                        system_prompt=state["system_prompt"],
-                    )
+                    if "ssh_config" in state:
+                        finding = YAMLSpecialist(ac).run(
+                            subtask_id=state["subtask_id"],
+                            subtask_description=state["subtask_description"],
+                            ssh_config=state["ssh_config"],
+                            service_context=state["service_context"],
+                            system_prompt=state["system_prompt"],
+                        )
+                    else:
+                        finding = YAMLSpecialist(ac).run_docker(
+                            subtask_id=state["subtask_id"],
+                            subtask_description=state["subtask_description"],
+                            container=state["container"],
+                            service_context=state["service_context"],
+                            system_prompt=state["system_prompt"],
+                        )
                     return {"current_cycle_findings": [finding]}
                 return node_fn
             registry[_agent_cfg.agent_type] = SpecialistRegistration(
@@ -175,18 +184,22 @@ def build_graph(product_config: ProductConfig):
                 continue
             svc = product_config.get_service(subtask.service_name)
             agent_cfg = product_config.get_agent(subtask.assigned_agent)
-            sends.append(
-                Send(
-                    entry.node_name,
-                    {
-                        "subtask_id": subtask.subtask_id,
-                        "subtask_description": _subtask_description(subtask, svc),
-                        "container": subtask.container,
-                        "service_context": _service_context(svc),
-                        "system_prompt": agent_cfg.system_prompt if agent_cfg else "",
-                    },
-                )
-            )
+            payload = {
+                "subtask_id": subtask.subtask_id,
+                "subtask_description": _subtask_description(subtask, svc),
+                "container": subtask.container,
+                "service_context": _service_context(svc),
+                "system_prompt": agent_cfg.system_prompt if agent_cfg else "",
+            }
+            if product_config.access_method == "ssh":
+                from framework.models import SSHConfig
+                host = (svc.ssh_host if svc else None) or product_config.ssh_host
+                user = (svc.ssh_user if svc else None) or product_config.ssh_user or "ubuntu"
+                key = (svc.ssh_key_path if svc else None) or product_config.ssh_key_path
+                if host and user:
+                    payload["ssh_config"] = SSHConfig(host=host, username=user, key_path=key)
+
+            sends.append(Send(entry.node_name, payload))
         return sends if sends else END
 
     # ── Assemble graph ────────────────────────────────────────────────────────

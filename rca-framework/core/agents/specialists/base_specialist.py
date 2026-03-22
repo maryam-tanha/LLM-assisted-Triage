@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
+import logging
 
 from dotenv import load_dotenv
 from langchain.agents import create_agent
@@ -19,6 +20,15 @@ from core.security.allowlist import CommandAllowlist
 from core.security.redactor import Redactor
 from core.tools.docker_tool import DockerExecutor
 from core.tools.ssh_tool import SSHExecutionError, SSHExecutor
+
+# Ensure this logger writes to a separate file and doesn't pollute the main log
+cmd_logger = logging.getLogger("CommandOutput")
+if not cmd_logger.handlers:
+    cmd_handler = logging.FileHandler("rca_commands.log")
+    cmd_handler.setLevel(logging.INFO)
+    cmd_handler.setFormatter(logging.Formatter('\n%(asctime)s - COMMAND OUTPUT:\n%(message)s\n' + '-'*60))
+    cmd_logger.addHandler(cmd_handler)
+cmd_logger.propagate = False
 
 # Load .env from the project root (rca-framework/)
 load_dotenv(Path(__file__).parent.parent.parent.parent / ".env")
@@ -62,7 +72,8 @@ class BaseSpecialist(ABC):
         redactor = Redactor()
         try:
             resolved_prompt = system_prompt or self._load_prompt_fallback()
-            context_output = self._run_context_commands(ssh_config, executor)
+            commands = service_context.get("context_commands") or self.context_commands
+            context_output = self._run_context_commands(ssh_config, executor, commands)
 
             def execute_command(command: str) -> str:
                 allowed, reason = CommandAllowlist.is_allowed(command)
@@ -74,9 +85,11 @@ class BaseSpecialist(ABC):
                 except SSHExecutionError as exc:
                     return f"SSH_ERROR: {exc}"
 
+            service_guidance = _build_service_guidance(service_context)
             user_content = (
                 f"## Context Output (from initial log gathering)\n\n"
-                f"{context_output}\n\n"
+                f"{context_output}\n"
+                f"{service_guidance}\n"
                 f"## Investigation Task\n\n"
                 f"{subtask_description}\n\n"
                 f"{_INVESTIGATION_SUFFIX}"
@@ -149,11 +162,11 @@ class BaseSpecialist(ABC):
         return ""
 
     def _run_context_commands(
-        self, ssh_config: SSHConfig, executor: SSHExecutor
+        self, ssh_config: SSHConfig, executor: SSHExecutor, commands: list[str] | None = None
     ) -> str:
         redactor = Redactor()
         outputs: list[str] = []
-        for command in self.context_commands:
+        for command in (commands or self.context_commands):
             allowed, reason = CommandAllowlist.is_allowed(command)
             if not allowed:
                 outputs.append(f"=== {command} ===\nSKIPPED (blocked): {reason}\n")
@@ -194,10 +207,23 @@ class BaseSpecialist(ABC):
         system_prompt = messages[0].content if messages else ""
         user_message = messages[1] if len(messages) > 1 else HumanMessage(content="")
 
+        import logging
+        import time
+        logger = logging.getLogger("SpecialistAgent")
+
         @tool
         def run_command(command: str) -> str:
             """Execute a read-only shell command on the target host and return output."""
-            return execute_command(command)
+            logger.info(f"Agent executing tool: {command}")
+            t0 = time.time()
+            result = execute_command(command)
+            duration = time.time() - t0
+            logger.info(f"Command returned {len(result)} chars in {duration:.2f}s")
+            
+            if os.environ.get("LOG_COMMAND_OUTPUTS", "false").lower() == "true":
+                cmd_logger.info(f"{command}\nOUTPUT:\n{result}")
+                
+            return result
 
         agent = create_agent(
             get_llm(),
@@ -208,10 +234,13 @@ class BaseSpecialist(ABC):
         buffer = max(2, max_iter // 5)
         recursion_limit = (max_iter + buffer) * 2 + 1
         try:
+            t0 = time.time()
             result = agent.invoke(
                 {"messages": [user_message]},
                 config={"recursion_limit": recursion_limit},
             )
+            duration = time.time() - t0
+            logger.info(f"Specialist LLM agent run completed in {duration:.2f}s")
         except GraphRecursionError:
             return (
                 "CONFIDENCE: 0.1\n"

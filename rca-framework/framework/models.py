@@ -51,6 +51,9 @@ class ServiceConfig(BaseModel):
     service_name: str
     description: str
     container: str                      # docker exec target
+    ssh_host: str | None = None
+    ssh_user: str | None = None
+    ssh_key_path: str | None = None
     expected_behavior: str
     known_failures: list[KnownFailure]
     context_commands: list[str]
@@ -106,6 +109,9 @@ class ProductConfig(BaseModel):
     profile_name: str = ""              # from profile.yaml profile_name key
     product: str
     access_method: str                  # "docker_exec" | "ssh"
+    ssh_host: str | None = None
+    ssh_user: str | None = None
+    ssh_key_path: str | None = None
     services: list[ServiceConfig]
     agents: list[AgentConfig] = []      # auto-discovered from agents/ subdirectory
     parent_prompt: str = ""             # loaded from parent.yaml

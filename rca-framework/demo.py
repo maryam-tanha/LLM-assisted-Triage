@@ -22,6 +22,13 @@ import os
 import sys
 import urllib.request
 from pathlib import Path
+import logging
+
+logging.basicConfig(
+    filename='rca_execution.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 sys.path.insert(0, str(Path(__file__).parent))
 

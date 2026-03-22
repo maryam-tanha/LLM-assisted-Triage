@@ -8,7 +8,7 @@ BLOCKED_PATTERNS: list[re.Pattern] = [
     re.compile(r">>"),            # append redirection
     re.compile(r"\|\s*bash"),
     re.compile(r"\|\s*sh\b"),
-    re.compile(r"sudo\s"),
+    # re.compile(r"sudo\s"),  # Relaxed for SSH docker commands
     re.compile(r"chmod\s"),
     re.compile(r"chown\s"),
     re.compile(r"\bcurl\b"),
@@ -16,7 +16,7 @@ BLOCKED_PATTERNS: list[re.Pattern] = [
     re.compile(r"\bnc\b"),
     re.compile(r"\bnetcat\b"),
     re.compile(r"eval\s"),
-    re.compile(r"exec\s"),
+    # re.compile(r"exec\s"),  # Relaxed for docker exec
     re.compile(r"\bdd\b"),
     re.compile(r"mkfs\b"),
     re.compile(r">/dev/"),
@@ -24,6 +24,10 @@ BLOCKED_PATTERNS: list[re.Pattern] = [
 
 # Allowed patterns are matched at the start of the command (after block check passes).
 ALLOWED_PATTERNS: list[re.Pattern] = [
+    re.compile(r"^docker\b"),
+    re.compile(r"^sudo\s+docker\b"),
+    re.compile(r"^sudo\s+-n\s+docker\b"),
+    re.compile(r"^find\b"),
     re.compile(r"^journalctl\b"),
     re.compile(r"^tail\b"),
     re.compile(r"^dmesg\b"),

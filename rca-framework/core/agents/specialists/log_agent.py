@@ -34,13 +34,22 @@ def log_specialist_node(state: dict) -> dict:
     Expected keys: subtask_id, subtask_description, container, service_context,
     system_prompt (injected by builder from profile YAML).
     """
-    finding = LogAgent().run_docker(
-        subtask_id=state["subtask_id"],
-        subtask_description=state["subtask_description"],
-        container=state["container"],
-        service_context=state.get("service_context", {}),
-        system_prompt=state.get("system_prompt", ""),
-    )
+    if "ssh_config" in state:
+        finding = LogAgent().run(
+            subtask_id=state["subtask_id"],
+            subtask_description=state["subtask_description"],
+            ssh_config=state["ssh_config"],
+            service_context=state.get("service_context", {}),
+            system_prompt=state.get("system_prompt", ""),
+        )
+    else:
+        finding = LogAgent().run_docker(
+            subtask_id=state["subtask_id"],
+            subtask_description=state["subtask_description"],
+            container=state["container"],
+            service_context=state.get("service_context", {}),
+            system_prompt=state.get("system_prompt", ""),
+        )
     return {"current_cycle_findings": [finding]}
 
 
