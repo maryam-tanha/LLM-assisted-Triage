@@ -77,7 +77,7 @@ services:
       - ROUNDCUBEMAIL_SKIN=elastic
       - ROUNDCUBEMAIL_UPLOAD_MAX_FILESIZE=25M
     volumes:
-      - ./config/redis-session.php:/var/roundcube/config/redis-session.inc.php
+      - ./config/setup-redis.sh:/entrypoint-tasks/post-setup/setup-redis.sh
     depends_on:
       db:
         condition: service_healthy
