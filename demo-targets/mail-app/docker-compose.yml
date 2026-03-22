@@ -76,6 +76,8 @@ services:
       - ROUNDCUBEMAIL_DB_PASSWORD=${DB_PASSWORD:-roundcube}
       - ROUNDCUBEMAIL_SKIN=elastic
       - ROUNDCUBEMAIL_UPLOAD_MAX_FILESIZE=25M
+    volumes:
+      - ./config/redis-session.php:/var/roundcube/config/redis-session.inc.php
     depends_on:
       db:
         condition: service_healthy
