@@ -69,9 +69,8 @@ class SSHExecutor:
             "timeout": ssh_config.timeout,
         }
         if ssh_config.key_path is not None:
-            connect_kwargs["pkey"] = paramiko.RSAKey.from_private_key_file(
-                ssh_config.key_path
-            )
+            # Use key_filename so paramiko auto-detects key type (RSA, Ed25519, ECDSA, etc.)
+            connect_kwargs["key_filename"] = ssh_config.key_path
         else:
             connect_kwargs["password"] = ssh_config.password
 
