@@ -8,3 +8,7 @@
 {"run_id": "inc-001", "model": "openai/gpt-4.1", "profile": "mail_app", "input_tokens": 11788, "output_tokens": 1222, "started_at": "2026-03-21T19:49:25", "duration_seconds": 20.5, "finished_at": "2026-03-21T19:49:46"}
 {"run_id": "inc-001", "model": "openai/gpt-4.1", "profile": "mail_app", "input_tokens": 108855, "output_tokens": 4325, "started_at": "2026-03-21T19:50:46", "duration_seconds": 73.8, "finished_at": "2026-03-21T19:52:00"}
 {"run_id": "inc-001", "model": "openai/gpt-4.1", "profile": "mail_app", "input_tokens": 70260, "output_tokens": 5923, "started_at": "2026-03-21T19:56:52", "duration_seconds": 135.2, "finished_at": "2026-03-21T19:59:07"}
+{"run_id": "inc-001", "model": "openai/gpt-4.1", "profile": "mail_app", "input_tokens": 25455, "output_tokens": 3219, "started_at": "2026-03-24T22:04:16", "duration_seconds": 505.3, "finished_at": "2026-03-24T22:12:41"}
+{"run_id": "inc-6bde5b", "model": "openai/gpt-4.1", "profile": "mail_app", "input_tokens": 155794, "output_tokens": 10766, "started_at": "2026-03-24T22:14:19", "duration_seconds": 482.2, "finished_at": "2026-03-24T22:22:21"}
+{"run_id": "inc-c33e48", "model": "openai/gpt-4.1", "profile": "mail_app", "input_tokens": 106407, "output_tokens": 6223, "started_at": "2026-03-24T22:22:45", "duration_seconds": 91.9, "finished_at": "2026-03-24T22:24:17"}
+{"run_id": "inc-98b699", "model": "openai/gpt-4.1", "profile": "mail_app", "input_tokens": 126576, "output_tokens": 6253, "started_at": "2026-03-24T22:38:28", "duration_seconds": 136.5, "finished_at": "2026-03-24T22:40:44"}

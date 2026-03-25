@@ -232,6 +232,27 @@ SMTP sends unaffected. Roundcube webmail sessions unaffected. Failure rate scale
 with number of concurrent users. Suspect Dovecot misconfiguration.
 ```
 
+### RCA Agent Result (inc-98b699) ✅ CORRECT
+
+**Model:** openai/gpt-4.1 | **Cycles:** 4 | **Elapsed:** 136.5s | **Nodes:** 4/6 | **Est. cost:** ~$0.49
+
+**Root Cause Found:**
+> Dovecot's configuration enforced a per-user, per-IP IMAP connection limit (`mail_max_userip_connections=1`),
+> leading to mass IMAP login rejections and session drops when legitimate users attempted concurrent connections.
+
+**Evidence the agent cited:**
+- Dovecot logs showed repeated rejections due to `mail_max_userip_connections=1` being exceeded
+- Log event timeline matched exactly with user-reported session drops and RPS collapse after 10:00 PM
+- Ruled out OOM, disk exhaustion, fatal application/infrastructure errors
+
+**Recommended Actions (from agent):**
+1. Increase `mail_max_userip_connections` to 3–5
+2. Test under simulated load to confirm fix
+3. Implement alerts for connection limit utilization
+4. Document concurrency controls in deployment runbooks
+
+**Verdict:** Agent correctly identified the injected fault (`mail_max_userip_connections=1`) as root cause in 4 cycles / 136s. No false positives.
+
 ### Restore
 ```bash
 docker exec mail-app-mailserver-1 sed -i '/mail_max_userip_connections/d' /tmp/docker-mailserver/dovecot.cf
@@ -260,4 +281,4 @@ docker exec mail-app-mailserver-1 supervisorctl restart dovecot
 | EXP-03 | ☐ | ☐ | ☐ | — |
 | EXP-04 | ☐ | ☐ | ☐ | — |
 | EXP-05 | ☐ | ☐ | ☐ | — |
-| EXP-06 | ✅ | ✅ | ☐ | — |
+| EXP-06 | ✅ | ✅ | ✅ | ✅ Agent correctly identified `mail_max_userip_connections=1` as root cause (4 cycles, 136s, ~$0.49) |

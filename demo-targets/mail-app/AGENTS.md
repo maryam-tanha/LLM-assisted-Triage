@@ -28,7 +28,7 @@ Tracks experiment runs, agent findings, and outstanding tasks for the mail-app d
 | EXP-03 | Redis maxmemory=1mb | ☐ | ☐ | ☐ | — |
 | EXP-04 | Postfix size_limit=1024 | ☐ | ☐ | ☐ | — |
 | EXP-05 | Roundcube stopped | ☐ | ☐ | ☐ | — |
-| EXP-06 | Dovecot mail_max_userip_connections=1 | ✅ | ✅ | ☐ | — |
+| EXP-06 | Dovecot mail_max_userip_connections=1 | ✅ | ✅ | ✅ | ✅ Correct — agent found exact root cause in 4 cycles / 136s |
 
 > Update each cell with ✅ / ❌ and a one-line finding as you run experiments.
 
@@ -42,17 +42,18 @@ Tracks experiment runs, agent findings, and outstanding tasks for the mail-app d
 - [x] Run from GitHub repo (not manual copy)
 - [x] Fix Roundcube healthcheck (case-insensitive grep)
 - [x] Fix locustfile bugs: `r.url` None, IMAP state after reconnect, round-trip polling
-- [x] Write 5 fault injection experiments (EXPERIMENTS.md)
+- [x] Write 6 fault injection experiments (EXPERIMENTS.md)
+- [x] Fix ssh_tool.py RSAKey hardcoding → auto-detect key type
+- [x] EXP-06: Inject → Locust signal ✅ → RCA agent ✅ (correct root cause, 4 cycles, 136s, ~$0.49)
 
 ### Up Next
-- [ ] Restore EXP-06 fault (run restore command), then run RCA agent against it first
+- [ ] Restore EXP-06 fault on server
 - [ ] Run EXP-01 end-to-end (inject → Locust → RCA agent → restore)
 - [ ] Run EXP-02 end-to-end
 - [ ] Run EXP-03 end-to-end
 - [ ] Run EXP-04 end-to-end
 - [ ] Run EXP-05 end-to-end
-- [ ] Wire mail-app profile into `rca-framework/configs/` (if not already)
-- [ ] Document RCA agent findings per experiment
+- [ ] Document all RCA agent findings per experiment
 
 ---
 
