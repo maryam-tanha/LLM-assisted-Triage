@@ -1,6 +1,6 @@
 # Mail App — Fault Injection Experiments
 
-Five experiments to test the RCA agent against real failure modes in the mail stack.
+Six experiments to test the RCA agent against real failure modes in the mail stack.
 
 ---
 
@@ -191,6 +191,55 @@ docker start mail-app-roundcube-1
 
 ---
 
+---
+
+## EXP-06 — Dovecot IMAP Connection Limit Misconfiguration
+
+**Target:** `mailserver` (Dovecot)
+**Fault:** Set `mail_max_userip_connections=1` — Dovecot allows only 1 simultaneous IMAP connection per user per IP. Under any multi-user load test, concurrent IMAP sessions from the same IP are immediately rejected. SMTP and Roundcube login are unaffected.
+
+> ✅ **Confirmed working** — Verified via Locust: 29 failures with explicit Dovecot error message.
+
+### Inject
+```bash
+docker exec mail-app-mailserver-1 sh -c 'echo mail_max_userip_connections=1 >> /tmp/docker-mailserver/dovecot.cf'
+docker exec mail-app-mailserver-1 supervisorctl restart dovecot
+```
+
+### Expected Locust Signal
+| Metric | Signal |
+|--------|--------|
+| `IMAP imap.login` | Failures — `[UNAVAILABLE] Maximum number of connections from user+IP exceeded` |
+| `IMAP imap.full_session` | Failures — same error, EOF, connection reset |
+| `IMAP imap.search_unseen` | Failures after reconnect attempts |
+| `SMTP smtp.send` | **Unaffected** |
+| `HTTP webmail.*` | **Unaffected** (Roundcube uses its own pooled connection) |
+
+### Observed Locust Output (confirmed)
+```
+29  IMAP  imap.full_session  error('[UNAVAILABLE] Maximum number of connections from user+IP exceeded (mail_max_userip_connections=1)')
+ 3  IMAP  imap.full_session  abort('command: LOGIN => socket error: EOF')
+ 1  IMAP  imap.full_session  ConnectionResetError(10054, ...)
+ 3  IMAP  imap.login         abort('command: LOGIN => socket error: EOF')
+ 2  IMAP  imap.login         ConnectionResetError(10054, ...)
+```
+
+### RCA Incident Description
+```
+IMAP service degraded under load. Direct IMAP connections from Locust failing with
+"Maximum number of connections from user+IP exceeded (mail_max_userip_connections=1)".
+SMTP sends unaffected. Roundcube webmail sessions unaffected. Failure rate scales
+with number of concurrent users. Suspect Dovecot misconfiguration.
+```
+
+### Restore
+```bash
+docker exec mail-app-mailserver-1 sed -i '/mail_max_userip_connections/d' /tmp/docker-mailserver/dovecot.cf
+docker exec mail-app-mailserver-1 supervisorctl restart dovecot
+```
+
+---
+
 ## Quick Reference
 
 | ID | Fault | Broken | Healthy |
@@ -200,6 +249,7 @@ docker start mail-app-roundcube-1
 | EXP-03 | Redis `maxmemory=1mb` | Roundcube sessions (silent 200s) | SMTP, IMAP direct |
 | EXP-04 | Postfix `message_size_limit=1024` | All sends | Logins, reads |
 | EXP-05 | `docker stop roundcube` | Web UI only | SMTP, IMAP, RoundTrip |
+| EXP-06 | Dovecot `mail_max_userip_connections=1` | IMAP only (partial degradation) | SMTP, Webmail |
 
 ## Progress
 
@@ -210,3 +260,4 @@ docker start mail-app-roundcube-1
 | EXP-03 | ☐ | ☐ | ☐ | — |
 | EXP-04 | ☐ | ☐ | ☐ | — |
 | EXP-05 | ☐ | ☐ | ☐ | — |
+| EXP-06 | ✅ | ✅ | ☐ | — |

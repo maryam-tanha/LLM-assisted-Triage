@@ -28,6 +28,7 @@ Tracks experiment runs, agent findings, and outstanding tasks for the mail-app d
 | EXP-03 | Redis maxmemory=1mb | ☐ | ☐ | ☐ | — |
 | EXP-04 | Postfix size_limit=1024 | ☐ | ☐ | ☐ | — |
 | EXP-05 | Roundcube stopped | ☐ | ☐ | ☐ | — |
+| EXP-06 | Dovecot mail_max_userip_connections=1 | ✅ | ✅ | ☐ | — |
 
 > Update each cell with ✅ / ❌ and a one-line finding as you run experiments.
 
@@ -44,6 +45,7 @@ Tracks experiment runs, agent findings, and outstanding tasks for the mail-app d
 - [x] Write 5 fault injection experiments (EXPERIMENTS.md)
 
 ### Up Next
+- [ ] Restore EXP-06 fault (run restore command), then run RCA agent against it first
 - [ ] Run EXP-01 end-to-end (inject → Locust → RCA agent → restore)
 - [ ] Run EXP-02 end-to-end
 - [ ] Run EXP-03 end-to-end

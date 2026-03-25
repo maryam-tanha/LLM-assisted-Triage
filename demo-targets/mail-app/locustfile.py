@@ -320,10 +320,16 @@ class WebMailUser(HttpUser):
 
     @task(5)
     def list_inbox(self):
-        self.client.get(
+        with self.client.get(
             "/?_task=mail&_action=list&_mbox=INBOX&_remote=1",
             name="webmail.list_inbox",
-        )
+            catch_response=True,
+        ) as r:
+            body = r.text or ""
+            if 'name="_pass"' in body or 'id="login-form"' in body:
+                r.failure("Session dropped! Redirected to login form.")
+            else:
+                r.success()
 
     @task(3)
     def open_message(self):
@@ -346,10 +352,16 @@ class WebMailUser(HttpUser):
                 pass
 
         if uid:
-            self.client.get(
+            with self.client.get(
                 f"/?_task=mail&_action=show&_uid={uid}&_mbox=INBOX",
                 name="webmail.open_message",
-            )
+                catch_response=True,
+            ) as r:
+                body = r.text or ""
+                if 'name="_pass"' in body or 'id="login-form"' in body:
+                    r.failure("Session dropped! Redirected to login.")
+                else:
+                    r.success()
 
     @task(2)
     def compose_and_send(self):
@@ -447,7 +459,12 @@ class WebMailUser(HttpUser):
             "_is_html": "0",
             "_priority": "0",
         }
-        self.client.post("/?_task=mail&_action=send", data=payload, name="webmail.send")
+        with self.client.post("/?_task=mail&_action=send", data=payload, name="webmail.send", catch_response=True) as r:
+            body = r.text or ""
+            if 'name="_pass"' in body or 'id="login-form"' in body:
+                r.failure("Session dropped! Redirected to login.")
+            else:
+                r.success()
 
         # Wait for delivery
         gevent.sleep(2)
