@@ -57,11 +57,31 @@ m.tanha@northeastern.edu}
 
 \maketitle
 \begin{abstract}
-
+During a production incident in a cloud-native microservice deployment,
+Site Reliability Engineering teams must SSH into multiple hosts, sift
+through logs, and reconcile metrics across monitoring stacks, all
+under time pressure. Large Language Models can speed up parts of this
+workflow, yet prior work shows they fail at topological reasoning:
+they cannot trace a fault through a service call chain unless the
+dependency graph is handed to them explicitly. We present an
+open-source, hierarchical multi-agent framework built on LangGraph
+that tackles this limitation. A Parent Agent drives iterative
+investigation cycles, farming out subtasks to parallel Specialist
+Agents (ReAct-based workers that run read-only commands over
+Docker~exec or SSH) while a Synthesis Agent ties together
+cross-domain findings between cycles. Operators declare their service
+topology in YAML files validated by Pydantic at startup; adding a new
+specialist requires only a YAML config, no Python. A two-layer
+security model (command allowlist plus output redaction) prevents
+agents from modifying infrastructure or leaking credentials. We test
+the framework on a five-service Docker~Compose voting application
+with injected faults and report root-cause identification accuracy,
+wall-clock investigation time, and token cost.
 \end{abstract}
 
 \begin{IEEEkeywords}
-
+multi-agent systems, large language models, root cause analysis,
+AIOps, site reliability engineering, LangGraph
 \end{IEEEkeywords}
 \section{Introduction}
 A production incident in a cloud-native microservice architecture puts Site Reliability Engineering (SRE) and DevOps teams
@@ -177,24 +197,52 @@ Synthesis Agent that correlates findings across domains before the
 next cycle. Specialist workers report exclusively through the orchestrator, a design
 choice grounded in resilience evidence that flat and linear topologies suffer
 substantially higher accuracy loss under agent failure~\cite{huang2024resilience}.
-An Evaluator Agent reviews the draft RCA report before it is released.
+Each product is described in its own profile directory of YAML
+files, validated by Pydantic at load time; pointing the framework at
+a different environment requires editing configuration, not code.
 
 \subsection{Service Configuration}
 
 We wanted operators to describe their infrastructure once, in a format
 they already understand, without writing any agent-specific code. The
-result is a per-product YAML file validated by Pydantic at startup.
+result is a \emph{profile directory} per product, validated by Pydantic
+at startup:
 
-Each entry in the \texttt{services} block captures what a healthy
-instance looks like (\texttt{expected\_behavior}), what patterns
-signal trouble (\texttt{known\_failures}), and which shell commands
-collect an initial evidence snapshot before the investigation begins
-(\texttt{context\_commands}). An \texttt{agents} key references
-separate YAML files describing each specialist, including routing
-guidance (\texttt{when\_to\_use}, \texttt{do\_not\_use}) that the
-Parent Agent reads verbatim when deciding whom to assign. Nothing
-is hardcoded in the planner prompt; the topology is loaded at
-invocation time, so adding a service means editing one file.
+\begin{itemize}
+  \item \texttt{profile.yaml} -- product metadata, access method
+        (\texttt{docker\_exec} or \texttt{ssh}), and a
+        \texttt{services} block where each entry captures what a
+        healthy instance looks like (\texttt{expected\_behavior}),
+        what patterns signal trouble (\texttt{known\_failures}),
+        and which shell commands collect an initial evidence snapshot
+        (\texttt{context\_commands}).
+  \item \texttt{agents/*.yaml} -- one file per specialist, each
+        declaring an \texttt{agent\_type}, a domain-specific
+        \texttt{system\_prompt}, routing guidance
+        (\texttt{when\_to\_use}, \texttt{do\_not\_use}),
+        optional agent-level \texttt{context\_commands}, and a
+        \texttt{gather\_docker\_host\_context} flag that controls
+        whether Docker-level metadata is collected before the
+        specialist begins.
+  \item \texttt{parent.yaml} and \texttt{synthesis.yaml} -- customizable
+        system prompts for the Parent and Synthesis agents, allowing
+        operators to adjust orchestration behavior per product
+        without modifying framework code.
+\end{itemize}
+
+At runtime the Parent Agent reads the specialist routing hints
+verbatim when choosing whom to assign. Nothing is hardcoded in the
+planner prompt; the entire profile is loaded at invocation time, so
+onboarding a new product amounts to filling in a directory.
+
+Specialists can also be introduced without writing Python at all. A
+YAML agent configuration file is enough: a generic
+\texttt{YAMLSpecialist} bridge class picks it up at startup,
+builds the corresponding ReAct agent, and wires the node into the
+graph. In practice this means an operator who knows, say, Kafka
+internals can contribute a specialist by writing a system prompt and
+a few routing hints, and the framework takes care of registration and
+graph wiring.
 
 \subsection{Parent Agent and Planning}
 
@@ -220,6 +268,15 @@ We chose not to rely on the agent voluntarily concluding: once
 the framework hard-wires \texttt{write\_rca\_conclusion} as the only
 permitted tool call; the loop cannot run indefinitely.
 
+Not every incident requires autonomous planning from scratch. The
+framework therefore supports a \emph{manual investigation mode}: an
+operator who already suspects a specific service can pre-populate the
+subtask list before launching the graph. If subtasks exist at
+cycle~0, the Parent Agent skips the LLM call and fans them out
+directly. Any subsequent cycles fall back to normal LLM-driven
+planning, so the autonomous loop remains available even when the
+first round is hand-directed.
+
 \subsection{Specialist Agents}
 
 A specialist is a LangChain Reasoning + Acting (ReAct) agent with a deliberately narrow
@@ -235,6 +292,15 @@ Before the ReAct loop begins, the framework pre-runs the service's
 logs. Both are injected into the agent's opening message, giving it
 a concrete evidence baseline without spending any tool-call budget; log output is structured
 at ingestion using in-context parsing templates~\cite{xu2024divlog}.
+When the per-agent flag \texttt{gather\_docker\_host\_context} is
+set, the framework additionally collects \texttt{docker inspect}
+(full container configuration and state), \texttt{docker stats
+-{}-no-stream} (a point-in-time CPU, memory, network, and I/O
+snapshot), and \texttt{docker events} filtered to the preceding
+24~hours (daemon-level signals: OOM kills, restarts, health-check
+failures). We added this because application logs alone miss certain
+failure modes entirely; a container killed by the kernel OOM reaper,
+for example, leaves no application-level trace.
 The loop then runs until the agent emits a structured final answer or
 hits \texttt{MAX\_ITERATIONS} (default:~10), at which point a
 low-confidence \texttt{SpecialistFinding} is returned so the cycle
@@ -249,11 +315,15 @@ open transport sessions to avoid repeated handshake overhead in
 production environments.
 
 Adding a specialist requires no changes to the orchestration layer.
-A new module calls \texttt{register()} at import time; the graph
+A new Python module calls \texttt{register()} at import time; the graph
 builder wires the new node in at startup and the Parent Agent sees it
-in its routing prompt the next invocation.
+in its routing prompt the next invocation. As noted in
+Section~III-A, a specialist can also be defined purely through YAML:
+the \texttt{YAMLSpecialist} class reads the config, assembles the
+prompt and tool bindings, and registers the node, so operators can
+extend coverage without writing Python.
 
-\subsection{Synthesis and Evaluation}
+\subsection{Synthesis}
 
 After each cycle's specialists finish, the Synthesis Agent reads new
 \texttt{SpecialistFinding} objects tracked via a \texttt{findings\_offset} pointer to
@@ -269,15 +339,13 @@ evidence window without branching into further data collection.
 The resulting summary feeds into \texttt{cumulative\_history}, which
 the Parent Agent reads at the start of every subsequent cycle.
 
-When the Parent Agent calls \texttt{write\_rca\_conclusion}, the draft
-report goes to the Evaluator Agent rather than directly to the user.
-The Evaluator scores it on accuracy, completeness, professionalism,
-and actionability. A passing score releases the report; a failing
-score sends structured revision feedback back to the Parent Agent,
-which re-enters the loop with that feedback as additional context.
-This mirrors the post-generation review design of SageCopilot~\cite{liao2025sagecopilot}
-and is partly motivated by misclassification rates seen in zero-shot LLM
-deployments~\cite{szandala2025aiops_reliability}.
+Once the Parent Agent calls \texttt{write\_rca\_conclusion}, the
+structured report (root cause, contributing factors, evidence
+summary, and recommended actions) goes directly to the operator.
+We intend to add an automated evaluation stage in a future iteration,
+scoring drafts on accuracy, completeness, and actionability before
+release, following the review-before-delivery pattern shown effective
+by SageCopilot~\cite{liao2025sagecopilot}.
 
 \subsection{Security Model}
 
