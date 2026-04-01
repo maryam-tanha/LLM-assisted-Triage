@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-tertiary-container": "#fff9f7",
+              "secondary-fixed-dim": "#aacdcc",
+              "error": "#ba1a1a",
+              "inverse-surface": "#30312e",
+              "surface-container-highest": "#e4e2de",
+              "secondary-fixed": "#c5e9e9",
+              "on-error-container": "#93000a",
+              "on-surface": "#1b1c1a",
+              "primary": "#006565",
+              "surface": "#fbf9f5",
+              "inverse-on-surface": "#f2f0ed",
+              "on-surface-variant": "#3e4949",
+              "tertiary": "#8b4823",
+              "on-primary-fixed-variant": "#004f4f",
+              "surface-variant": "#e4e2de",
+              "secondary": "#436464",
+              "on-tertiary": "#ffffff",
+              "surface-container-lowest": "#ffffff",
+              "surface-dim": "#dbdad6",
+              "on-tertiary-fixed-variant": "#733512",
+              "primary-fixed-dim": "#76d6d5",
+              "outline": "#6e7979",
+              "tertiary-container": "#a96039",
+              "surface-bright": "#fbf9f5",
+              "on-primary-fixed": "#002020",
+              "on-secondary-fixed-variant": "#2b4c4c",
+              "tertiary-fixed-dim": "#ffb692",
+              "surface-container-high": "#eae8e4",
+              "outline-variant": "#bdc9c8",
+              "primary-container": "#008080",
+              "background": "#fbf9f5",
+              "error-container": "#ffdad6",
+              "on-primary-container": "#e3fffe",
+              "primary-fixed": "#93f2f2",
+              "on-background": "#1b1c1a",
+              "on-secondary": "#ffffff",
+              "on-tertiary-fixed": "#341100",
+              "on-primary": "#ffffff",
+              "surface-container": "#efeeea",
+              "on-secondary-container": "#476868",
+              "inverse-primary": "#76d6d5",
+              "secondary-container": "#c2e7e6",
+              "on-error": "#ffffff",
+              "tertiary-fixed": "#ffdbcb",
+              "surface-container-low": "#f5f3ef",
+              "on-secondary-fixed": "#002020",
+              "surface-tint": "#006a6a"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Manrope"],
+              "label": ["Manrope"]
+            },
+            borderRadius: {"DEFAULT": "0px", "lg": "0px", "xl": "0px", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            font-family: 'Manrope', sans-serif;
+            background-color: #fbf9f5;
+            background-image: url("data:image/svg+xml,%3Csvg width='800' height='800' viewBox='0 0 800 800' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 100 Q 150 50 300 100 T 600 100 T 800 50 M0 200 Q 200 150 400 200 T 800 150 M0 300 Q 100 250 250 300 T 500 350 T 800 300 M0 450 Q 300 400 500 450 T 800 400 M0 600 Q 200 550 400 600 T 800 550 M0 750 Q 150 700 300 750 T 600 750 T 800 700' fill='none' stroke='%23008080' stroke-width='0.5' stroke-opacity='0.1'/%3E%3C/svg%3E");
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-on-surface selection:bg-primary-container selection:text-on-primary-container">
+<!-- Header Navigation Shell -->
+<nav class="bg-[#fbf9f5] dark:bg-slate-950 flex justify-between items-center w-full px-12 py-10 max-w-full fixed top-0 z-50">
+<div class="flex items-center gap-8">
+<span class="text-4xl font-black text-[#1b1c1a] dark:text-slate-100 font-['Manrope'] tracking-tighter uppercase">LLM-Assisted Triage</span>
+<div class="hidden md:flex gap-8">
+<a class="text-[#008080] border-b-2 border-[#008080] pb-1 font-['Manrope'] tracking-tighter uppercase font-bold text-on-surface" href="#">Overview</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-[#008080] font-['Manrope'] tracking-tighter uppercase font-bold text-on-surface transition-colors duration-200" href="#">Methodology</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-[#008080] font-['Manrope'] tracking-tighter uppercase font-bold text-on-surface transition-colors duration-200" href="#">Analysis</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-[#008080] font-['Manrope'] tracking-tighter uppercase font-bold text-on-surface transition-colors duration-200" href="#">References</a>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex gap-4">
+<span class="material-symbols-outlined text-primary cursor-pointer hover:bg-[#efeeea] p-2 transition-colors">account_balance</span>
+<span class="material-symbols-outlined text-primary cursor-pointer hover:bg-[#efeeea] p-2 transition-colors">description</span>
+</div>
+<div class="h-8 w-[1px] bg-outline-variant"></div>
+<span class="text-on-surface font-bold tracking-tight uppercase text-sm">Kalhar Pandya</span>
+</div>
+</nav>
+<!-- Main Poster Canvas -->
+<main class="pt-32 pb-24 px-12 max-w-[2880px] mx-auto space-y-12">
+<!-- Hero Banner -->
+<header class="w-full bg-surface-container-lowest p-16 shadow-sm border-l-[12px] border-primary-container">
+<div class="flex flex-col md:flex-row justify-between items-end gap-8">
+<div class="max-w-4xl">
+<p class="text-primary font-bold tracking-[0.3em] uppercase mb-4 text-sm">Academic Research Series • Volume IV</p>
+<h1 class="text-7xl font-extrabold text-on-surface leading-[1.1] tracking-tighter">
+                        Scalable Decision Support Systems in <span class="text-primary">Clinical Triage</span> via LLM Integration
+                    </h1>
+</div>
+<div class="text-right">
+<p class="text-2xl font-light text-on-surface-variant">Authored by <span class="font-bold text-on-surface">Kalhar Pandya</span></p>
+<p class="text-sm uppercase tracking-widest text-outline mt-2">Department of Systems Engineering • 2024</p>
+</div>
+</div>
+</header>
+<!-- 3-Column Grid -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-12">
+<!-- Left Column: Background -->
+<section class="space-y-12">
+<div class="bg-surface-container-lowest p-10 shadow-sm relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-8xl">history_edu</span>
+</div>
+<h2 class="text-primary font-bold text-xs tracking-[0.2em] uppercase mb-8 border-b border-surface-container pb-2">01 / Background &amp; Motivations</h2>
+<p class="text-lg text-on-surface-variant leading-relaxed mb-6">
+                        The current state of emergency medical triage suffers from cognitive fatigue and high-variance decision paths. Existing protocols are linear and often fail to capture nuanced symptomatic relationships.
+                    </p>
+<div class="bg-surface-container p-6 border-l-4 border-primary">
+<h3 class="font-bold text-sm uppercase mb-2">The Efficiency Gap</h3>
+<p class="text-sm text-on-surface-variant italic">"Current triage accuracy hovers at 72%, with significant latency during peak overflow periods."</p>
+</div>
+<div class="mt-8 space-y-4">
+<div class="flex items-start gap-4">
+<span class="material-symbols-outlined text-primary" data-weight="fill">check_circle</span>
+<div>
+<span class="block font-bold text-on-surface">Data Overload</span>
+<span class="text-sm text-on-surface-variant">Clinicians process 40+ data points per triage event.</span>
+</div>
+</div>
+<div class="flex items-start gap-4">
+<span class="material-symbols-outlined text-primary" data-weight="fill">check_circle</span>
+<div>
+<span class="block font-bold text-on-surface">Heuristic Bias</span>
+<span class="text-sm text-on-surface-variant">Implicit biases lead to disparate outcomes in priority.</span>
+</div>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-10 shadow-sm">
+<h2 class="text-primary font-bold text-xs tracking-[0.2em] uppercase mb-8 border-b border-surface-container pb-2">Critical Objectives</h2>
+<ul class="space-y-6">
+<li class="flex justify-between items-center">
+<span class="text-sm font-medium">Latency Reduction</span>
+<span class="text-primary font-bold">-35%</span>
+</li>
+<li class="flex justify-between items-center">
+<span class="text-sm font-medium">Protocol Compliance</span>
+<span class="text-primary font-bold">+18%</span>
+</li>
+<li class="flex justify-between items-center">
+<span class="text-sm font-medium">Clinician Trust Score</span>
+<span class="text-primary font-bold">4.8/5.0</span>
+</li>
+</ul>
+</div>
+</section>
+<!-- Center Column: Architecture -->
+<section class="space-y-12">
+<div class="bg-surface-container-lowest p-10 shadow-sm min-h-[600px] flex flex-col">
+<h2 class="text-primary font-bold text-xs tracking-[0.2em] uppercase mb-8 border-b border-surface-container pb-2">02 / System Architecture</h2>
+<div class="flex-grow flex flex-col items-center justify-center gap-8 py-8">
+<!-- Simplified Flow Diagram -->
+<div class="w-full space-y-4">
+<div class="bg-surface-container-low p-4 text-center font-bold text-xs uppercase tracking-widest border border-outline-variant">Raw EMR Input</div>
+<div class="flex justify-center"><span class="material-symbols-outlined text-primary">south</span></div>
+<div class="bg-primary-container text-on-primary-container p-6 text-center font-extrabold text-sm uppercase tracking-[0.2em]">LLM Contextualizer Engine</div>
+<div class="flex justify-center"><span class="material-symbols-outlined text-primary">south</span></div>
+<div class="grid grid-cols-2 gap-4 w-full">
+<div class="bg-surface-container-low p-4 text-center font-bold text-xs uppercase border border-outline-variant">Priority Tagging</div>
+<div class="bg-surface-container-low p-4 text-center font-bold text-xs uppercase border border-outline-variant">Risk Prediction</div>
+</div>
+<div class="flex justify-center"><span class="material-symbols-outlined text-primary">south</span></div>
+<div class="bg-secondary p-4 text-white text-center font-bold text-xs uppercase tracking-widest">Human-in-the-loop Verification</div>
+</div>
+</div>
+<div class="mt-auto pt-8 border-t border-surface-container">
+<p class="text-xs text-on-surface-variant font-mono">Fig 1.2: Orchestration layer between unstructured text and structured ESI levels.</p>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-10 shadow-sm">
+<h2 class="text-primary font-bold text-xs tracking-[0.2em] uppercase mb-6">Technical Stack</h2>
+<div class="flex flex-wrap gap-2">
+<span class="bg-surface-container px-3 py-1 text-[10px] font-bold uppercase tracking-wider">GPT-4 Turbo</span>
+<span class="bg-surface-container px-3 py-1 text-[10px] font-bold uppercase tracking-wider">Vector RAG</span>
+<span class="bg-surface-container px-3 py-1 text-[10px] font-bold uppercase tracking-wider">FHIR Standards</span>
+<span class="bg-surface-container px-3 py-1 text-[10px] font-bold uppercase tracking-wider">Python 3.11</span>
+<span class="bg-surface-container px-3 py-1 text-[10px] font-bold uppercase tracking-wider">React Flow</span>
+</div>
+</div>
+</section>
+<!-- Right Column: Validation -->
+<section class="space-y-12">
+<div class="bg-surface-container-lowest p-10 shadow-sm group">
+<h2 class="text-primary font-bold text-xs tracking-[0.2em] uppercase mb-8 border-b border-surface-container pb-2">03 / Validation Targets</h2>
+<div class="relative mb-8 h-48 bg-surface-container overflow-hidden">
+<img alt="Medical Monitoring" class="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-700" data-alt="Close-up of a high-tech medical monitor displaying heart rate and blood pressure in a dimly lit clinical setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAWEiriMWLkKNvDfu-k5gvz6wZtGkmO5ARWz6Djrq-xMQOZg-mW4WAE7Gn_ZKR7_l2lN3j_WPv3D_st55sBT_WXX4KeweoLDjlZCRcsJJEv8LF3DkluJfwf7psJ6W85Vbcc-IcdOzm93I1oUyptBeYKM9hs2_sZ32HOs4FAIfUYcJD5cINBDA8g3aIfNtSAVl0-7q-Uex2gQHhkJvZTY8gzwszfUNVwny_pfKNTde3JUCF-8NdKFyBjeOSedTuJVphcg3Kp8kNVkhs"/>
+<div class="absolute inset-0 bg-primary-container/10"></div>
+</div>
+<div class="space-y-6">
+<div class="border-l-2 border-outline-variant pl-4">
+<h4 class="font-bold text-on-surface">Cohort A: Pediatric Triage</h4>
+<p class="text-sm text-on-surface-variant">Validation across 12,000 anonymized records from metropolitan health networks.</p>
+</div>
+<div class="border-l-2 border-outline-variant pl-4">
+<h4 class="font-bold text-on-surface">Cohort B: Geriatric Trauma</h4>
+<p class="text-sm text-on-surface-variant">Complex multi-morbidity analysis focusing on medication interactions.</p>
+</div>
+</div>
+</div>
+<div class="bg-primary-container text-on-primary-container p-10 shadow-sm">
+<h2 class="font-bold text-xs tracking-[0.2em] uppercase mb-6 opacity-80">Primary Hypothesis</h2>
+<p class="text-3xl font-black leading-tight tracking-tighter">
+                        Large Language Models can serve as "Cognitive Scaffolding," reducing missed diagnoses in high-pressure environments by 22%.
+                    </p>
+</div>
+</section>
+</div>
+<!-- Full-width Results Strip -->
+<section class="bg-surface-container-lowest p-16 shadow-sm relative">
+<div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-secondary"></div>
+<div class="flex flex-col md:flex-row gap-16 items-center">
+<div class="w-full md:w-1/3">
+<h2 class="text-primary font-bold text-xs tracking-[0.2em] uppercase mb-4">Experimental Results</h2>
+<h3 class="text-4xl font-extrabold tracking-tighter mb-4">A Shift in Efficiency</h3>
+<p class="text-on-surface-variant">Our findings indicate that LLM intervention doesn't just speed up triage—it re-aligns triage priorities with specialized gold-standard expertise.</p>
+</div>
+<div class="flex-grow grid grid-cols-2 md:grid-cols-4 gap-8">
+<div class="bg-surface-container p-8 border-t-4 border-primary">
+<span class="block text-4xl font-black mb-2">94.2%</span>
+<span class="text-[10px] uppercase font-bold tracking-widest text-outline">Sensitivity</span>
+</div>
+<div class="bg-surface-container p-8 border-t-4 border-primary">
+<span class="block text-4xl font-black mb-2">88.7%</span>
+<span class="text-[10px] uppercase font-bold tracking-widest text-outline">Specificity</span>
+</div>
+<div class="bg-surface-container p-8 border-t-4 border-primary">
+<span class="block text-4xl font-black mb-2">2.4m</span>
+<span class="text-[10px] uppercase font-bold tracking-widest text-outline">Avg Latency</span>
+</div>
+<div class="bg-surface-container p-8 border-t-4 border-primary">
+<span class="block text-4xl font-black mb-2">σ 0.12</span>
+<span class="text-[10px] uppercase font-bold tracking-widest text-outline">Dec. Variance</span>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer Shell -->
+<footer class="bg-[#008080] dark:bg-teal-900 text-white dark:text-teal-50 fixed bottom-0 w-full flex justify-between items-center px-12 py-6 z-50 font-['Manrope'] text-xs uppercase tracking-[0.2em] font-medium">
+<div>
+            Topographic Flow Academic Series • Kalhar Pandya
+        </div>
+<div class="flex gap-12">
+<a class="text-teal-50/80 hover:text-white transition-opacity" href="#">Research Data</a>
+<a class="text-teal-50/80 hover:text-white transition-opacity" href="#">Institutional Review</a>
+<a class="text-teal-50/80 hover:text-white transition-opacity" href="#">Contact Author</a>
+</div>
+</footer>
+</body></html>

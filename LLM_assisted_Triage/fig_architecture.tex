@@ -1,0 +1,243 @@
+
+% ── Colour palette (used only in this figure) ───────────────────
+\definecolor{inputbg} {RGB}{232,240,254}
+\definecolor{inputbd} {RGB}{160,190,240}
+\definecolor{procbg}  {RGB}{220,238,255}
+\definecolor{procbd}  {RGB}{130,180,220}
+\definecolor{outbg}   {RGB}{230,249,238}
+\definecolor{outbd}   {RGB}{100,190,140}
+\definecolor{boxbg}   {RGB}{250,252,255}
+\definecolor{boxbd}   {RGB}{150,185,225}
+\definecolor{parentbg}{RGB}{235,244,255}
+\definecolor{parentbd}{RGB}{80,130,200}
+\definecolor{synthbg} {RGB}{248,240,255}
+\definecolor{synthbd} {RGB}{148,100,210}
+\definecolor{agentbd} {RGB}{110,165,220}
+\definecolor{arrowcol}{RGB}{70,120,190}
+\definecolor{loopcol} {RGB}{220,140,20}
+\definecolor{revcolor}{RGB}{190,60,50}
+\definecolor{passgreen}{RGB}{60,160,100}
+\definecolor{outarrow} {RGB}{50,150,90}
+
+\begin{figure*}[t]
+    \centering
+    \makebox[\textwidth][c]{%
+    \begin{tikzpicture}[
+      font=\small\sffamily,
+      >=Stealth,
+      layer/.style  = {draw, rounded corners=6pt, inner sep=12pt,
+                       blur shadow={shadow blur steps=5, shadow xshift=0.5pt,
+                                    shadow yshift=-1pt, shadow opacity=15}},
+      box/.style    = {draw=boxbd, fill=boxbg, rounded corners=4pt,
+                       inner sep=5pt, minimum height=22pt, align=center,
+                       blur shadow={shadow blur steps=3, shadow opacity=10}},
+      agent/.style  = {draw=agentbd, fill=boxbg, rounded corners=4pt,
+                       inner sep=4pt, minimum width=70pt, minimum height=38pt,
+                       align=center, text width=66pt,
+                       blur shadow={shadow blur steps=3, shadow opacity=10}},
+      parent/.style = {draw=parentbd, fill=parentbg, rounded corners=6pt,
+                       inner sep=7pt, minimum width=180pt, minimum height=36pt,
+                       align=center, line width=1.3pt,
+                       blur shadow={shadow blur steps=4, shadow opacity=15}},
+      synth/.style  = {draw=synthbd, fill=synthbg, rounded corners=6pt,
+                       inner sep=7pt, minimum width=380pt, minimum height=32pt,
+                       align=center, line width=1.3pt,
+                       blur shadow={shadow blur steps=4, shadow opacity=15}},
+      evalbox/.style= {draw=passgreen, fill=outbg, rounded corners=6pt,
+                       inner sep=7pt, minimum width=200pt, minimum height=38pt,
+                       align=center, line width=1.3pt,
+                       blur shadow={shadow blur steps=4, shadow opacity=15}},
+      arr/.style    = {->, thick, color=arrowcol},
+      arrgr/.style  = {->, thick, color=outarrow},
+      looparr/.style= {->, very thick, color=loopcol, dashed},
+      revarr/.style = {->, thick, color=revcolor, dashed},
+      sublabel/.style = {font=\fontsize{7}{8}\selectfont\sffamily\itshape,
+                         color=gray!70},
+    ]
+    
+    % ── INPUT LAYER ────────────────────────────────────────────────
+    \node[box] (src) {
+      \textbf{Integration Source}\\[1pt]
+      {\fontsize{7}{8}\selectfont PagerDuty / Jira / Manual}
+    };
+    
+    \node[box, right=12pt of src] (ticket) {
+      \textbf{Incident Ticket}\\[2pt]
+      {\fontsize{7}{8}\selectfont\textit{title}: [Incident Title]}\\
+      {\fontsize{7}{8}\selectfont\textit{severity}: [P1/P2/P3]}\\
+      {\fontsize{7}{8}\selectfont\textit{services}: [List]}
+    };
+    
+    \node[box, right=18pt of ticket] (yaml) {
+      \textbf{Service Configuration (YAML)}\\[2pt]
+      {\fontsize{7}{8}\selectfont\texttt{product:} VotingApp}\\
+      {\fontsize{7}{8}\selectfont\texttt{services: [vote, redis, worker, \ldots]}}\\
+      {\fontsize{7}{8}\selectfont\texttt{agents: [log, runtime\_status, \ldots]}}
+    };
+    
+    \begin{pgfonlayer}{background}
+      \node[layer, draw=inputbd, fill=inputbg,
+            fit=(src)(ticket)(yaml),
+            label={[anchor=south west, inner sep=2pt, font=\fontsize{8}{9}\selectfont\sffamily\bfseries,
+                    text=gray!60] north west:INPUT LAYER}] (inputlayer) {};
+    \end{pgfonlayer}
+    
+    \draw[arr] (src.east) -- (ticket.west);
+    
+    % ── PROCESSING LAYER ───────────────────────────────────────────
+    \node[parent, below=28pt of ticket] (parent) {
+      \textbf{\large Parent Agent}\\[2pt]
+      {\fontsize{8}{9}\selectfont Plans $\cdot$ Delegates $\cdot$ Converges}
+    };
+    
+    \node[agent, below=22pt of parent, xshift=-130pt] (logagent) {
+      \textbf{Log}\\[-1pt]\textbf{Agent}\\[2pt]
+      {\fontsize{7}{8}\selectfont Error patterns,}\\
+      {\fontsize{7}{8}\selectfont app logs, \texttt{journalctl}}
+    };
+    
+    \node[agent, right=8pt of logagent] (rtagent) {
+      \textbf{Runtime}\\[-1pt]\textbf{Status Agent}\\[2pt]
+      {\fontsize{7}{8}\selectfont CPU, mem, disk,}\\
+      {\fontsize{7}{8}\selectfont process state}
+    };
+    
+    \node[agent, right=8pt of rtagent] (net) {
+      \textbf{Network}\\[-1pt]\textbf{Agent}\\[2pt]
+      {\fontsize{7}{8}\selectfont Connectivity,}\\
+      {\fontsize{7}{8}\selectfont latency, DNS}
+    };
+    
+    \node[agent, right=8pt of net] (db) {
+      \textbf{Database}\\[-1pt]\textbf{Agent}\\[2pt]
+      {\fontsize{7}{8}\selectfont Query perf,}\\
+      {\fontsize{7}{8}\selectfont locks, replication}
+    };
+    
+    \node[agent, right=8pt of db, dashed, draw=gray!60, text=gray!80, fill=gray!5] (ext) {
+      {\fontsize{8}{9}\selectfont\textit{Custom}}\\[-1pt]
+      {\fontsize{8}{9}\selectfont\textit{Specialist}}\\[2pt]
+      {\fontsize{7}{8}\selectfont\textit{Extensible via}}\\
+      {\fontsize{7}{8}\selectfont\textit{\texttt{register()}}}
+    };
+    
+    \node[synth, below=20pt of rtagent, xshift=55pt] (synth) {
+      \textbf{\normalsize Synthesis Agent}\\[2pt]
+      {\fontsize{8}{9}\selectfont
+       Cross-Domain Consolidation $\cdot$
+       Causal Chain Analysis $\cdot$
+       Large Context Window}
+    };
+    
+    \begin{pgfonlayer}{background}
+      \node[layer, draw=procbd, fill=procbg,
+            fit=(parent)(logagent)(rtagent)(net)(db)(ext)(synth),
+            label={[anchor=south west, inner sep=2pt, font=\fontsize{8}{9}\selectfont\sffamily\bfseries,
+                    text=gray!60] north west:PROCESSING LAYER}] (proclayer) {};
+    \end{pgfonlayer}
+    
+    % ── OUTPUT LAYER ───────────────────────────────────────────────
+    \node[evalbox, below=36pt of synth] (eval) {
+      \textbf{\normalsize Evaluator Agent}\\[2pt]
+      {\fontsize{8}{9}\selectfont
+       Accuracy $\cdot$ Completeness $\cdot$
+       Professionalism $\cdot$ Actionability}
+    };
+    
+    \node[box, right=18pt of eval, draw=passgreen, fill=outbg] (pass) {
+      {\color{passgreen}\textbf{PASS}}\\[1pt]
+      {\fontsize{7}{8}\selectfont Confidence $\geq\tau$}
+    };
+    
+    \node[box, right=12pt of pass, draw=outbd, fill=outbg] (report) {
+      \textbf{Final RCA Report}\\[2pt]
+      {\fontsize{7}{8}\selectfont Root cause $\cdot$ Evidence}\\
+      {\fontsize{7}{8}\selectfont Contributing factors}\\
+      {\fontsize{7}{8}\selectfont Recommended actions}
+    };
+    
+    \begin{pgfonlayer}{background}
+      \node[layer, draw=outbd, fill=outbg,
+            fit=(eval)(pass)(report),
+            label={[anchor=south west, inner sep=2pt, font=\fontsize{8}{9}\selectfont\sffamily\bfseries,
+                    text=gray!60] north west:OUTPUT LAYER}] (outlayer) {};
+    \end{pgfonlayer}
+    
+    % ── ARROWS ─────────────────────────────────────────────────────
+    
+    % Input → Parent
+    \draw[arr] (ticket.south)
+        -- node[left, sublabel]{incident + config}
+        (parent.north);
+    
+    % YAML → Parent
+    \coordinate (yamldown) at ($(yaml.south) + (0,-10pt)$);
+    \draw[arr, dashed, color=gray!60]
+        (yaml.south)
+        -- (yamldown)
+        -- node[above, sublabel, xshift=-28pt]{Pydantic-validated}
+        (parent.east |- yamldown)
+        -- (parent.east);
+    
+    % Parent → Specialists (fan-out)
+    \coordinate (fanout) at ($(parent.south) + (0,-12pt)$);
+    \draw[arr] (parent.south) -- node[left, sublabel, yshift=-1pt]{\texttt{Send()} fan-out} (fanout) -| (logagent.north);
+    \draw[arr] (fanout) -| (rtagent.north);
+    \draw[arr] (fanout) -| (net.north);
+    \draw[arr] (fanout) -| (db.north);
+    
+    % Specialists → Synthesis (fan-in)
+    \coordinate (fanin) at ($(synth.north) + (0,12pt)$);
+    \draw[arr] (logagent.south) -- ++(0,-6pt) -| (fanin);
+    \draw[arr] (rtagent.south)  -- ++(0,-6pt) -| (fanin);
+    \draw[arr] (net.south)      -- ++(0,-6pt) -| (fanin);
+    \draw[arr] (db.south)       -- ++(0,-6pt) -| (fanin);
+    \draw[arr] (fanin) -- node[right, sublabel]{\texttt{SpecialistFinding}} (synth.north);
+    
+    % Synthesis → Parent (investigation loop, left side)
+    \coordinate (loopX) at ($(logagent.west) + (-20pt, 0)$);
+    \draw[looparr] (synth.west) -- (synth.west -| loopX)
+        -- node[left, sublabel, align=center, fill=procbg, inner sep=2pt]{%
+             \textbf{Investigation}\\
+             \textbf{Loop}\\
+             (max $N$ cycles)}
+        (parent.west -| loopX) -- (parent.west);
+    
+% Parent → Evaluator (when concluding)
+% Route outside right edge of processing layer, drop into the OUTPUT LAYER padding, then left to eval.north
+\coordinate (concludeRight) at ($(proclayer.east) + (18pt, 0)$);
+\coordinate (concludeMidY) at ($(eval.north) + (0, 25pt)$);
+\draw[arrgr, very thick, rounded corners=6pt]
+    (parent.east)
+    -- node[above, sublabel, pos=0.8]{conclude}
+    (parent.east -| concludeRight)
+    -- (concludeRight |- concludeMidY)
+    -- (eval.north |- concludeMidY)
+    -- (eval.north);
+    
+    % Evaluator → Pass → Report
+    \draw[arrgr] (eval.east) -- (pass.west);
+    \draw[arrgr] (pass.east) -- (report.west);
+    
+    % Revision feedback (FAIL path)
+    \coordinate (failX)  at ($(logagent.west) + (-55pt, 0)$);
+    \draw[revarr] (eval.west) -- (eval.west -| failX)
+        -- node[left,
+                font=\fontsize{7}{8}\selectfont\sffamily\itshape\color{revcolor},
+                align=center, fill=white, inner sep=2pt]{Revision\\Feedback\\(FAIL)}
+        (parent.west -| failX) -- (parent.west);
+    
+    % ── Title ──────────────────────────────────────────────────────
+    \node[above=6pt of inputlayer,
+          font=\normalsize\sffamily\bfseries]
+      {System Overview: Hierarchical Multi-Agent RCA Architecture};
+    
+    \end{tikzpicture}%
+    }% end makebox
+    \caption{Multi-agent RCA architecture. The Parent Agent fans out
+      investigation subtasks in parallel and iterates until the Evaluator
+      Agent approves the draft report or the cycle limit is reached.
+      Dashed red path: revision feedback on a failing evaluation.}
+    \label{fig:architecture}
+    \end{figure*}
+    

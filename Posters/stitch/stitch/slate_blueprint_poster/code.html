@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>LLM-Assisted Triage: A Multi-Agent Framework</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,700;1,400&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-secondary-fixed": "#0d1c2d",
+                        "surface-variant": "#243648",
+                        "on-tertiary-container": "#393b3b",
+                        "on-error": "#690005",
+                        "surface": "#021525",
+                        "on-primary-container": "#00414f",
+                        "surface-bright": "#293b4d",
+                        "inverse-surface": "#d1e4fb",
+                        "secondary-container": "#39485a",
+                        "secondary": "#b9c8de",
+                        "primary-container": "#00b4d8",
+                        "on-tertiary-fixed": "#1a1c1c",
+                        "primary-fixed": "#b3ebff",
+                        "surface-container-highest": "#243648",
+                        "on-primary-fixed-variant": "#004e5f",
+                        "tertiary": "#c6c6c7",
+                        "inverse-primary": "#00677d",
+                        "on-secondary-fixed-variant": "#39485a",
+                        "secondary-fixed": "#d4e4fa",
+                        "on-tertiary-fixed-variant": "#454747",
+                        "tertiary-fixed-dim": "#c6c6c7",
+                        "outline-variant": "#3d494d",
+                        "on-primary": "#003642",
+                        "on-error-container": "#ffdad6",
+                        "secondary-fixed-dim": "#b9c8de",
+                        "surface-container": "#0e2132",
+                        "surface-container-lowest": "#000f1e",
+                        "tertiary-fixed": "#e2e2e2",
+                        "on-tertiary": "#2f3131",
+                        "tertiary-container": "#a4a5a5",
+                        "error-container": "#93000a",
+                        "on-secondary-container": "#a7b6cc",
+                        "outline": "#869398",
+                        "on-surface-variant": "#bcc9ce",
+                        "surface-container-low": "#091d2e",
+                        "surface-container-high": "#192b3d",
+                        "surface-dim": "#021525",
+                        "on-background": "#d1e4fb",
+                        "primary": "#4cd6fb",
+                        "inverse-on-surface": "#203243",
+                        "on-secondary": "#233143",
+                        "on-surface": "#d1e4fb",
+                        "primary-fixed-dim": "#4cd6fb",
+                        "surface-tint": "#4cd6fb",
+                        "error": "#ffb4ab",
+                        "background": "#021525",
+                        "on-primary-fixed": "#001f27"
+                    },
+                    fontFamily: {
+                        "headline": ["Noto Serif"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            background-color: #021525;
+            background-image: 
+                linear-gradient(to right, rgba(0, 180, 216, 0.05) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 180, 216, 0.05) 1px, transparent 1px);
+            background-size: 40px 40px;
+            font-family: 'Inter', sans-serif;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .blueprint-grid-accent {
+            background-image: radial-gradient(circle at 2px 2px, rgba(76, 214, 251, 0.15) 1px, transparent 0);
+            background-size: 20px 20px;
+        }
+    </style>
+</head>
+<body class="text-on-surface min-h-screen flex flex-col items-center p-12 overflow-x-hidden">
+<!-- TopAppBar Section (Title Banner) -->
+<header class="w-full h-[3.5in] flex items-center border-b-[0.5px] border-cyan-900/30 bg-[#021525] dark:bg-slate-950 shadow-[0_32px_64px_-15px_rgba(0,31,39,0.3)] px-20 mb-12 relative overflow-hidden">
+<div class="absolute inset-0 blueprint-grid-accent opacity-20"></div>
+<div class="flex justify-between items-start w-full max-w-none relative z-10">
+<div class="max-w-4xl">
+<span class="label-sm text-primary tracking-[0.2em] font-medium mb-4 block uppercase">Research Folio | v1.0.4</span>
+<h1 class="font-serif text-[3.5rem] tracking-tight leading-tight text-primary">
+                    LLM-Assisted Triage: A Multi-Agent Framework for Automated Incident Root Cause Analysis
+                </h1>
+</div>
+<div class="text-right border-l border-primary/20 pl-8">
+<div class="font-serif italic text-xl text-cyan-400 mb-2">The Scholarly Blueprint</div>
+<div class="text-secondary font-medium text-lg">Kalhar Pandya</div>
+<div class="text-slate-400 text-sm mt-1">Department of Computer Science</div>
+<div class="flex gap-4 mt-6 justify-end">
+<span class="material-symbols-outlined text-primary cursor-pointer hover:text-cyan-200 transition-colors duration-300">account_balance</span>
+<span class="material-symbols-outlined text-primary cursor-pointer hover:text-cyan-200 transition-colors duration-300">settings</span>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="w-full max-w-[1440px] grid grid-cols-12 gap-8 mb-12">
+<!-- Navigation Sidebar (Integrated SideNavBar logic) -->
+<nav class="col-span-1 hidden lg:flex flex-col gap-8 py-4 sticky top-12 h-fit">
+<div class="flex flex-col gap-6 bg-slate-900/60 backdrop-blur-xl p-4 rounded-xl border border-cyan-900/20 shadow-xl">
+<div class="flex items-center gap-3 text-cyan-400 p-2 border-r-4 border-cyan-400 bg-cyan-950/40 rounded-sm">
+<span class="material-symbols-outlined">analytics</span>
+</div>
+<div class="flex items-center gap-3 text-slate-400 hover:text-slate-200 p-2 transition-all duration-300">
+<span class="material-symbols-outlined">architecture</span>
+</div>
+<div class="flex items-center gap-3 text-slate-400 hover:text-slate-200 p-2 transition-all duration-300">
+<span class="material-symbols-outlined">biotech</span>
+</div>
+<div class="flex items-center gap-3 text-slate-400 hover:text-slate-200 p-2 transition-all duration-300">
+<span class="material-symbols-outlined">equalizer</span>
+</div>
+<div class="flex items-center gap-3 text-slate-400 hover:text-slate-200 p-2 transition-all duration-300">
+<span class="material-symbols-outlined">menu_book</span>
+</div>
+</div>
+</nav>
+<!-- Middle Columns (10" height equivalent sections) -->
+<div class="col-span-11 grid grid-cols-3 gap-8 h-auto">
+<!-- Left Column: Background & Motivations -->
+<section class="space-y-8">
+<div class="bg-surface-container p-8 rounded-lg shadow-lg relative group">
+<div class="absolute top-0 left-0 w-1 h-full bg-primary/30 group-hover:bg-primary transition-colors"></div>
+<h2 class="font-serif text-[1.75rem] text-primary mb-6 flex items-center gap-3">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+                        Abstract &amp; Background
+                    </h2>
+<p class="text-body-md leading-[1.6] text-on-surface-variant mb-4">
+                        Modern distributed systems generate high-velocity telemetry making manual incident triage an operational bottleneck. Existing heuristics often fail to capture complex causal relationships between microservices.
+                    </p>
+<div class="mt-6 flex flex-wrap gap-2">
+<span class="px-3 py-1 bg-secondary-container text-on-secondary-container text-[0.6875rem] uppercase tracking-wider rounded-full">Telemetry Analysis</span>
+<span class="px-3 py-1 bg-secondary-container text-on-secondary-container text-[0.6875rem] uppercase tracking-wider rounded-full">Root Cause</span>
+</div>
+</div>
+<div class="bg-surface-container p-8 rounded-lg shadow-lg border-t border-outline-variant/15">
+<h2 class="font-serif text-[1.75rem] text-primary mb-6">Motivations</h2>
+<ul class="space-y-4">
+<li class="flex gap-4 items-start">
+<span class="w-1.5 h-1.5 rounded-full bg-primary mt-2"></span>
+<span class="text-on-surface-variant">Cognitive overload in SOC environments due to alert fatigue.</span>
+</li>
+<li class="flex gap-4 items-start">
+<span class="w-1.5 h-1.5 rounded-full bg-primary mt-2"></span>
+<span class="text-on-surface-variant">Need for autonomous agents capable of querying logs, metrics, and traces.</span>
+</li>
+<li class="flex gap-4 items-start">
+<span class="w-1.5 h-1.5 rounded-full bg-primary mt-2"></span>
+<span class="text-on-surface-variant">Requirement for deterministic audit trails in AI-driven RCA.</span>
+</li>
+</ul>
+</div>
+</section>
+<!-- Center Column: Architecture -->
+<section class="flex flex-col h-full bg-surface-container-high rounded-lg overflow-hidden border border-cyan-900/10">
+<div class="p-8 border-b border-outline-variant/20 bg-surface-bright/30">
+<h2 class="font-serif text-[1.75rem] text-primary mb-2">Multi-Agent Architecture</h2>
+<p class="text-label-sm uppercase tracking-widest text-secondary opacity-70">System Design &amp; Flow Control</p>
+</div>
+<div class="flex-grow p-4 bg-surface-container-lowest relative">
+<img alt="System Architecture Diagram" class="w-full h-full object-cover rounded opacity-80" data-alt="Technical blueprint diagram of complex network nodes connected by glowing blue light paths on a dark slate background with mathematical notations." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDJlta9N0zpOW8NSJ6iaY-pfUmVgt1rjs0mWGOmTeYJixIJsJFQ_V2dQPphdoZ3_O3HWiQlXTMuj2BPkWFDIf3oOkeCCfbLCm-cKd33iklfRzp937O3zcdzDBF5kDdPhJ_HRL7HMhC6L8npiCOUMBTuHWXDQ_PIX4XVOgLSSMyjYQ2nx11scPwJPNuiV1odyqfbGJWxgLvHZtt86d9yddrUpsY7FxUwr6aZecHW0CHIZeRX8zI1O0ZJjOj2Gte7JjcDl9iKX3vszLs"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-lowest via-transparent to-transparent"></div>
+<!-- Blueprint Annotations -->
+<div class="absolute bottom-8 left-8 right-8 p-4 bg-surface-container/80 backdrop-blur-md rounded border border-primary/20">
+<div class="flex items-center gap-2 mb-2">
+<div class="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+<span class="text-primary text-[0.6875rem] font-bold tracking-tighter">FIG 1.0: THE ORCHESTRATOR LOOP</span>
+</div>
+<p class="text-label-sm text-secondary leading-relaxed">The central controller leverages a ReAct (Reason + Act) loop to dispatch sub-agents for specialized log parsing and trace analysis.</p>
+</div>
+</div>
+</section>
+<!-- Right Column: Security & Validation -->
+<section class="space-y-8">
+<div class="bg-surface-container p-8 rounded-lg shadow-lg border-b-4 border-primary-container">
+<h2 class="font-serif text-[1.75rem] text-primary mb-6">Security &amp; Demo Targets</h2>
+<div class="space-y-6">
+<div class="flex items-start gap-4 p-4 bg-surface-container-low rounded">
+<span class="material-symbols-outlined text-primary-fixed-dim" style="font-variation-settings: 'FILL' 1;">verified_user</span>
+<div>
+<p class="title-lg text-primary-fixed-dim font-bold">Policy Isolation</p>
+<p class="text-body-md text-on-surface-variant">Sandboxed execution environments for LLM-generated queries.</p>
+</div>
+</div>
+<div class="flex items-start gap-4 p-4 bg-surface-container-low rounded">
+<span class="material-symbols-outlined text-primary-fixed-dim" style="font-variation-settings: 'FILL' 1;">target</span>
+<div>
+<p class="title-lg text-primary-fixed-dim font-bold">Chaos Mesh Targets</p>
+<p class="text-body-md text-on-surface-variant">Validation against injected pod failures and network latency.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-8 rounded-lg border border-outline-variant/10">
+<h2 class="font-serif text-[1.75rem] text-primary mb-6">Validation Metrics</h2>
+<div class="space-y-4">
+<div class="w-full bg-surface-variant h-2 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[85%]"></div>
+</div>
+<div class="flex justify-between text-label-sm uppercase tracking-tighter">
+<span>Precision</span>
+<span class="text-primary">85.4%</span>
+</div>
+<div class="w-full bg-surface-variant h-2 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[92%]"></div>
+</div>
+<div class="flex justify-between text-label-sm uppercase tracking-tighter">
+<span>Recall</span>
+<span class="text-primary">92.1%</span>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- Results Strip (Full Width 7") -->
+<section class="w-full max-w-[1440px] mb-12">
+<div class="bg-surface-container-high p-10 rounded-xl shadow-2xl relative overflow-hidden">
+<div class="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -mr-32 -mt-32"></div>
+<div class="grid grid-cols-12 gap-12">
+<div class="col-span-4">
+<h2 class="font-serif text-[2.5rem] leading-none text-primary mb-6">EXP-06 Results</h2>
+<p class="text-body-md text-on-surface-variant mb-8">
+                        Comparative analysis between standard heuristic-based triage and our Multi-Agent Framework across 500 simulated incidents.
+                    </p>
+<div class="grid grid-cols-2 gap-4">
+<div class="p-4 bg-surface-container-low rounded border border-primary/10">
+<p class="text-label-sm text-secondary uppercase mb-1">Mean Time to Diagnose</p>
+<p class="text-3xl font-bold text-primary">-62%</p>
+</div>
+<div class="p-4 bg-surface-container-low rounded border border-primary/10">
+<p class="text-label-sm text-secondary uppercase mb-1">Heuristic Accuracy</p>
+<p class="text-3xl font-bold text-on-surface">42.8%</p>
+</div>
+</div>
+</div>
+<div class="col-span-8 bg-surface-container-lowest rounded-lg p-6 relative">
+<img alt="Performance Graphs" class="w-full h-64 object-cover rounded opacity-90 mix-blend-screen" data-alt="High-resolution data visualization showing multiple overlapping line charts with glowing cyan and slate lines against a dark technical grid." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBrkujPBJZPOL-Jt9RT716jhJofGS6iep1aGdzpVmpY1_1CMemY-03HUIwlMdcqJ7YHk9UgThsn7qQ9rCjC2lBrTiQUdV9Kb3PUt0kCw8MkQW-1sYUM4byeClvdxx7SWNbagpA99Zy2rQzVLJRT_PpaUQ83y9vyLGJ6m2EOvFhp7d0j3J5PCr77MkeKMAVMwYi3AnATG7nQzXt0x479xSmzthKfgC1pSpO7UL7PbdqDUhwHe85PYrTzJXFtUR5ci_MwnVInqdxcn2g"/>
+<div class="mt-4 flex justify-between items-center text-label-sm text-secondary">
+<span>X-AXIS: INCIDENT COMPLEXITY (SCORE 1-10)</span>
+<span>Y-AXIS: ATTRIBUTION ACCURACY (%)</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Bottom Row (4" height equivalent) -->
+<footer class="w-full max-w-[1440px] grid grid-cols-3 gap-8">
+<!-- Conclusions -->
+<div class="bg-surface-container p-8 rounded-lg">
+<h2 class="font-serif text-[1.5rem] text-primary mb-4 italic">Conclusions</h2>
+<p class="text-body-md text-on-surface-variant leading-relaxed">
+                The multi-agent approach significantly reduces MTTD while maintaining a verifiable chain of custody for all diagnostic steps. Future work explores real-time autonomous remediation.
+            </p>
+</div>
+<!-- References -->
+<div class="bg-surface-container p-8 rounded-lg flex flex-col justify-between">
+<h2 class="font-serif text-[1.5rem] text-primary mb-4 italic">References</h2>
+<div class="text-[0.75rem] text-secondary/60 space-y-2 font-mono">
+<p>[1] Vaswani et al. "Attention Is All You Need" (2017)</p>
+<p>[2] Yao et al. "ReAct: Synergizing Reasoning and Acting in LLMs" (2022)</p>
+<p>[3] SRE Handbook, Google Inc. (2016)</p>
+</div>
+</div>
+<!-- Contact / Repository -->
+<div class="bg-primary h-full rounded-lg p-8 flex flex-col justify-between items-start text-on-primary shadow-[0_10px_30px_rgba(76,214,251,0.2)]">
+<div>
+<h2 class="text-xl font-bold mb-2">Access the Code</h2>
+<p class="text-sm opacity-90">Dataset and Model Weights are available for academic peer review.</p>
+</div>
+<button class="bg-on-primary text-primary px-6 py-3 rounded-full font-bold flex items-center gap-2 hover:bg-on-primary/90 transition-all">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">download</span>
+                Download PDF Paper
+            </button>
+</div>
+</footer>
+<!-- Global Footer -->
+<div class="w-full mt-24 py-12 px-20 flex justify-between border-t border-cyan-900/10 bg-slate-950">
+<p class="font-sans text-[0.6875rem] tracking-[0.05em] uppercase text-slate-500">
+            © 2024 Digital Architect’s Folio | Scholarly Blueprint System
+        </p>
+<div class="flex gap-8">
+<a class="font-sans text-[0.6875rem] tracking-[0.05em] uppercase text-slate-500 hover:text-cyan-300 transition-colors" href="#">Contact Authors</a>
+<a class="font-sans text-[0.6875rem] tracking-[0.05em] uppercase text-slate-500 hover:text-cyan-300 transition-colors" href="#">Data Repository</a>
+<a class="font-sans text-[0.6875rem] tracking-[0.05em] uppercase text-slate-500 hover:text-cyan-300 transition-colors" href="#">Full Paper</a>
+</div>
+</div>
+</body></html>

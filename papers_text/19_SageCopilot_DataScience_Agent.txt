@@ -1,0 +1,1391 @@
+642
+IEEE TRANSACTIONS ON SERVICES COMPUTING, VOL. 19, NO. 1, JANUARY/FEBRUARY 2026
+SageCopilot: An LLM-Empowered Autonomous
+Agent for Data Science as a Service
+Yuan Liao
+, Jiang Bian, Member, IEEE, Yuhui Yun
+, Shuo Wang, Yubo Zhang, Jiaming Chu
+, Tao Wang
+,
+Yuchen Li
+, Member, IEEE, Xuhong Li
+, Shilei Ji
+, and Haoyi Xiong
+, Senior Member, IEEE
+Abstract—While the ﬁeld of natural language to SQL(NL2SQL)
+has made signiﬁcant advancements in translating natural language
+instructions into executable SQL scripts for data querying and
+processing, achieving full automation within the broader data sci-
+ence pipeline–encompassing data querying, analysis, visualization,
+and reporting–remains a complex challenge. This study introduces
+SageCopilot, an advanced, industry-grade system that automates
+the data science pipeline by integrating Large Language Models
+(LLMs),AutonomousAgents (AutoAgents),andLanguageUserIn-
+terfaces (LUIs). Designed with a two-phase architecture, SageCopi-
+lot uses an ofﬂine phase to generate high-quality demonstrations
+supporting In-Context Learning (ICL), which powers the online
+phase to transform user inputs into executable scripts for database
+queries, analysis, and visualization tasks. Leveraging specialized
+components such as NL2SQL, Text2Analyze, and Text2Viz, as well
+as chain-of-thought prompting for multi-turn interactions, Sage-
+Copilot achieves superior end-to-end automation. Rigorous ex-
+perimentation with real-world datasets demonstrates the system’s
+ability to minimize human intervention while ensuring correctness
+and user-friendly operation.
+Index Terms—LLMs, agents, data analysis, in-context learning,
+human-computer interaction.
+I. INTRODUCTION
+T
+HE advancements in natural language to SQL (NL2SQL)
+generation propose promising approaches to convert tex-
+tual instructions into structured query language (SQL) for
+database operations [1], [2], [3], [4]. However, achieving full
+automation in the data science pipeline is challenging due to the
+complexity of understanding user intents [5], [6], integrating
+access control mechanisms [7], and providing user-intention-
+driven visualizations of query results [8]. Thus, a comprehensive
+automation system needs to encapsulate intention understand-
+ing, data retrieval and analysis, and the generation of visual
+outputs, which traditionally requires expert involvement.
+The integration of LLMs and AutoAgents has paved the
+way for establishing comprehensive data science pipelines that
+connect language user interfaces (LUIs), databases, and data
+visualization tools with LLMs [9]. As shown in Fig. 1, an
+Received 22 February 2025; revised 9 September 2025; accepted 3 November
+2025. Date of publication 21 November 2025; date of current version 5 February
+2026. (Corresponding author: Haoyi Xiong.)
+Yuan Liao, Jiang Bian, Yuhui Yun, Shuo Wang, Yuchen Li, Xuhong Li,
+Shilei Ji, and Haoyi Xiong are with Baidu, Inc., Beijing 100085, China (e-mail:
+haoyi.xiong.fr@ieee.org).
+Yubo Zhang is with Beihang University, Beijing 100091, China.
+Jiaming Chu and Tao Wang are with the Beijing University of Posts and
+Telecommunications, Beijing 100876, China.
+Digital Object Identiﬁer 10.1109/TSC.2025.3635384
+Fig. 1.
+An illustration of An LLM-empowered Autonomous Agent for Data
+Science Cognitive Services with a Language User Interface (LUI).
+LLM-empowered Autonomous Agent can facilitate a chat-based
+service that supports various data science functionalities. These
+include querying databases, summarizing results, creating vi-
+sualizations, and even performing forecasting. Given the user’s
+query in natural language, AutoAgents can clarify user inten-
+tions using conversational interfaces and then plan for data
+querying, analysis, and visualization by utilizing LLM capa-
+bilities. By coordinating tasks across databases, authenticators,
+and visualization tools, as well as employing SQL & scripts
+generation [10], [11], [12], and data format conversions [11],
+AutoAgents can fulﬁll complex data science requirements au-
+tonomously.
+Though techniques to implement and improve components
+individually such as NL2SQL, have been intensively studied in
+previous works [1], [2], [3], [4], [9], [10], [11], [12], integrating
+these components is still a challenging task for achieving the
+goal of automated data sciences in an industry settings. Several
+non-trivial technical issues should be addressed:
+r Closed-Loop System with Multi-Tool: Existing systems,
+such as ChatGPT or Code Interpreter, either generate
+scripts under users’ supervision or manipulate uploaded
+datasets for potential data analysis. Human intervention
+1939-1374 © 2025 IEEE. All rights reserved, including rights for text and data mining, and training of artiﬁcial intelligence and similar technologies.
+Personal use is permitted, but republication/redistribution requires IEEE permission. See https://www.ieee.org/publications/rights/index.html for more information.
+Authorized licensed use limited to: Northeastern University. Downloaded on February 25,2026 at 02:37:40 UTC from IEEE Xplore.  Restrictions apply. 
+
+LIAO et al.: SAGECOPILOT: AN LLM-EMPOWERED AUTONOMOUS AGENT FOR DATA SCIENCE AS A SERVICE
+643
+Fig. 2.
+The overall framework of SageCopilot.
+(e.g., checking the correctness of the generated scripts,
+copyingandpastingthescripts toalocal executionenviron-
+ment for further data manipulations) might be indispens-
+able between every steps of interactions. However, for full
+automation of data science pipelines, it is necessary to have
+a system that processes user requests, manages databases,
+executes scripts, and reports analysis results in a seamless
+closed-loop, minimizing human intervention.
+r Domain Adaptation and Generalization: To enhance the
+accuracy of script generation, supervised ﬁne-tuning (SFT)
+of LLMs subject to various tasks is desired. However,
+SFT for adapting every data domain (e.g., databases for
+groceries stores, wholesales, corporate ﬁnance, etc.) or
+collecting a sufﬁciently large dataset for cross-domain
+generalization is resource consuming. Inappropriate SFT
+could hurt emergent abilities of an LLM due to catastrophic
+forgetting [13]. Thus, in addition to domain-speciﬁc SFT,
+the system should be capable of adapting to every data
+domain in the context of interactions with LLMs.
+r End-to-End Correctness and Reﬂection: Though every sin-
+gle component could be optimized with better accuracy or
+capacity, the system might hurt the overall user experience
+when it did not integrate the components well. The whole
+system should be aware of end-to-end correctness while
+some critical components should be “self-reﬂectable” to-
+wards the correctness and completeness of its output.
+To achieve above goals, we propose SageCopilot1 – a novel,
+industry-grade system to automate the data science pipelines.
+As shown in Fig. 2, SageCopilot consists of two phases. Given
+a database to be hosted by SageCopilot, the ofﬂine phase ﬁrst
+generatessufﬁcientdemonstrationsforin-contextlearning(ICL)
+to support the online phase. On the other hand, the online
+phase handles the user’s requests for data query and analysis
+whileprovidingscriptsgeneration,datamanipulationandresults
+visualization functionalities based on ICL with LLMs. The main
+contributions are as follows.
+r Given the demands of data analysis described as texts,
+we study the technical problem to correctly generate ex-
+ecutable scripts that could automatically and safely run
+1SageCopilot is an autonomous system developed for full automation of data
+science pipelines and is unrelated to Sage from www.sage.com or any of its
+business management tools.
+on external data tools of diverse types, such as MySQL,
+Spark, Hive, Flink, and eChart, within an industry-grade
+data science pipeline encompassing querying, analysis,
+visualization, authentication functionalities. To the best of
+our knowledge, this work is the ﬁrst to incorporate LLMs,
+AutoAgents, LUIs, databases, visualizers, authenticators,
+and other tools all in a closed-loop engaged with data users,
+by addressing autonomy, correctness and safety issues of
+querying, analysis and visualization.
+r To address the technical problem, we propose a novel au-
+tomated data sciences system, namely SageCopilot, based
+on newly fashioned LLM-driven AutoAgent technologies.
+Speciﬁcally, to maximize the accuracy of script genera-
+tion while avoiding to ﬁne-tune the LLM, SageCopilot
+consists of two pipelines – an ofﬂine pipeline collecting,
+generating and preparing a large number of demonstrations
+of possible user demands and the corresponding scripts
+for execution, while an online pipeline proposing LUI,
+NL2SQL, Text2Analyze and Text2Viz components to ﬁrst
+identify, clarify and complete users’ intentions, and then
+to generate the accurate scripts for querying, analysis,
+and visualization purposes using the prepared demonstra-
+tionsthroughICL.Moreover,Chain-of-Thought(COT)and
+prompt-tuning strategies have been adopted to improve
+the effectiveness of the AutoAgent through multi-round
+conversations between SageCopilot and LLMs.
+r To evaluate the performance of SageCopilot, we have
+carried out extensive experiments to test the end-to-end
+correctness of script generation and execution for data
+query, analysis and visualization, using real-world data.
+Particularly, we use ablation studies to evaluate the con-
+tribution to the end-to-end correctness made by different
+components and strategies throughout the whole data sci-
+ence ﬂow. Furthermore, case studies have been done to tes-
+tify the accuracy of key components, including NL2SQL,
+Text2Analyze and Text2Viz. The comparisons with other
+prompt-based solutions, on top of the same set of LLMs,
+shows SageCopilot achieve better end-to-end performance
+while maintaining good user experiences.
+SageCopilot aims to revolutionize the conventional manual-
+intensive data science pipeline by offering a fully automated,
+user-intention-driven, and industry-grade solution. This sys-
+tem stands out for its multi-faceted capabilities in effectively
+Authorized licensed use limited to: Northeastern University. Downloaded on February 25,2026 at 02:37:40 UTC from IEEE Xplore.  Restrictions apply. 
+
+644
+IEEE TRANSACTIONS ON SERVICES COMPUTING, VOL. 19, NO. 1, JANUARY/FEBRUARY 2026
+bridging the integration of LLM-empowered AutoAgents, LUIs,
+and robust data interaction tools within a seamless closed-loop
+framework. The key novelty of SageCopilot lies in its ability to
+harmonize ofﬂine demonstration preparation with online adap-
+tive processing, ensuring cross-domain functionality, correct-
+ness, and safety. By merging Chain-of-Thought techniques and
+prompt-tuning strategies for effective interaction and decision-
+making, SageCopilot offers a cutting-edge autonomous archi-
+tecture to meet the diverse and complex demands of modern
+data analytics with unparalleled accuracy, adaptability, and user-
+centric performance.
+II. RELATED WORK
+The quest to bridge the gap between natural language and
+database querying has led to the emergence of the NL2SQL
+ﬁeld, which seeks to translate natural language questions into ex-
+ecutable SQL queries. The pioneering works of Zhong et al. [1]
+with Seq2SQL and Xu et al. [2] with SQLNet laid the foundation
+for subsequent advancements, integrating reinforcement learn-
+ing and sequence-to-sequence models to adapt to the nuanced
+complexity of natural language. The integration of language
+models as agents, such as through LangChain, underscores a
+next-generation approach to human-computer interaction. Mod-
+ern implementations, as described by Shuster et al. [14], show-
+case the efﬁciency of these agents in not only understanding but
+also executing language-based tasks within software environ-
+ments. Large language models (LLMs), including GPT variants,
+have demonstrated considerable effectiveness in NL2SQL appli-
+cations through ﬁne-tuning. Papers like that of Wang et al. [15]
+detail the intricate prompt engineering required to guide these
+models toward generating syntactically and semantically ac-
+curate SQL queries. The importance of prompt engineering
+within the human-machine collaboration framework cannot be
+overstated. As investigated by Webb et al. [16], well-engineered
+prompts drastically enhance a model’s performance, acting as
+a form of ‘soft’ programming that speciﬁes the task at hand
+without the need for hard-coded algorithms.
+In the realm of automated data science pipelines, Data-
+Copilot [17] represents a signiﬁcant advancement in LLM-
+powered data analysis, which introduces a structured two-phase
+approach: data exploration and workﬂow deployment. As de-
+tailed by Zhang et al. [17], Data-Copilot relies on pre-designed
+interfaces to reduce errors during real-time responses, which
+results in a lack of ﬂexibility and autonomy.
+III. FRAMEWORK DESIGN
+As depicted in Fig. 2, the SageCopilot framework presents a
+sophisticated dual-phase approach to managing and processing
+natural language queries against complex databases. In the of-
+ﬂine phase, signiﬁcant emphasis is placed on the preparation and
+enrichment of a robust data foundation that underpins the online
+operational stage. Through metadata semantic governance, the
+framework lays the groundwork for a deep understanding of
+the data structure, ensuring comprehensive query understanding
+and accurate SQL generation. The construction of a rich seed
+data repository, supplemented by effective data augmentation
+strategies, further strengthens the system’s ability to produce
+precise query responses.
+Transitioning into the online phase, SageCopilot seamlessly
+shifts from data curation to real-time user engagement. The
+framework’s intent understanding and decision-making mod-
+ule utilizes the nuanced capabilities of LLM to interpret di-
+verse user queries, cater to non-standard question phrasings,
+and provide contextually relevant visualizations. The system’s
+adeptness at memory recall and schema linking further stream-
+lines the process, enabling efﬁcient and relevant information
+retrieval. The integration of SQL generation with in-context
+prompting, coupled with the reﬂective oversight offered by the
+SQL reﬂection module, ensures the production of accurate and
+logically coherent database queries. These features, alongside
+the essential components of tool use and authentication, con-
+ﬁrm that SageCopilot operates with precision, reliability, and
+security. Result presentation stands as the ﬁnal touchpoint in
+the user’s interaction with SageCopilot, where complex data
+is transformed into accessible and actionable insights through
+text replies, visualizations, and forecast models. This not only
+enhances the user experience but also extends the framework’s
+utility as a predictive tool for future trends and outcomes. The
+rest of this section will step into each phase for detailed design
+philosophies.
+A. Ofﬂine Phase
+The ofﬂine phase is devoted to the careful preparation of
+high-quality data that will be used in the online phase. This
+preparatory work involves ﬁve key activities: practicing meta-
+data semantic governance, constructing a base of seed data,
+enhancing the dataset through data augmentation, extracting
+information for schema linking, and interacting with memory
+vector database. Once collated and reﬁned, these datasets are
+embedded into a memory vector database which, in turn, equips
+the online phase with the necessary contextual data to meet
+speciﬁc user queries.
+1) Schema Semantic Governance: Schema Semantic Gover-
+nance is an ofﬂine process that curates a governed representation
+of the database schema to support LLM-driven NL2SQL. It
+involves:
+r Normalizing and enriching schema metadata with struc-
+tural and business semantics.
+r Optionally publishing governed semantic views that en-
+capsulate recurrent complex logic (e.g., multi-table joins,
+aggregations, JSON/array extraction) for consistent reuse.
+Schema information forms the backbone of accurate SQL
+generation. Our system incorporates a semantic governance
+pipeline comprising two key components:
+r Schema Modeling: Structural metadata (table names, col-
+umn names, data types) are extracted from the target
+database and augmented with domain knowledge. Key
+attributes are annotated with domain-speciﬁc meanings,
+and enumerated or hierarchical structures are enriched with
+context-aware constraints and relationships.
+r Semantic Views: For schemas involving complex tables or
+queries, SageCopilot employs semantic modeling views
+Authorized licensed use limited to: Northeastern University. Downloaded on February 25,2026 at 02:37:40 UTC from IEEE Xplore.  Restrictions apply. 
+
+LIAO et al.: SAGECOPILOT: AN LLM-EMPOWERED AUTONOMOUS AGENT FOR DATA SCIENCE AS A SERVICE
+645
+that abstract over physical data structures. These views
+encapsulate advanced SQL logic into table-like represen-
+tations, simplifying underlying operations and improving
+consistency, reusability, and security. While not all views
+can be fully automated—especially those embedding com-
+plex business knowledge—partial automation is achiev-
+able. For instance, repetitive and semantically simple views
+can be generated via template-based methods. Moreover,
+when multiple raw SQL queries are available, LLMs can
+be prompted to infer and synthesize a generalized view
+deﬁnition, particularly useful for encapsulating frequent
+multi-table joins or complex aggregations. Appendix B.1
+provides a practical example.
+SQL dialect compatibility is ensured during data source on-
+boarding, where each source is associated with a speciﬁc dialect
+(e.g., MySQL, Hive, Spark). The ICL examples provided during
+online processing are dialect-speciﬁc, ensuring executable cor-
+rectness without conﬂating dialect customization with semantic
+governance.
+2) Seed Data Construction: The autonomy of current LLMs
+in generating complex SQL remains limited, particularly when
+confronted with domain-speciﬁc nuances. To enhance the stabil-
+ity and accuracy of SQL generation, we leverage the ICL capa-
+bility of LLMs by dynamically incorporating relevant <Query,
+SQL> pairs tailored to the user’s current question.
+The construction of these seed data pairs involves three
+complementary strategies. First, we populate <Query, SQL>
+pairs from queries commonly used in business workﬂows. These
+queries often involve bespoke business indicators, such as met-
+rics or identiﬁers unique to an organization. By analyzing histor-
+ical logs (e.g., SQL execution logs and reporting dashboards),
+we identify high-priority queries and annotate them with corre-
+sponding natural language descriptions. Domain experts curate
+these pairs to ensure alignment with real-world enterprise oper-
+ations, including schema-speciﬁc details and ﬁeld-level seman-
+tics. For instance, an organization-speciﬁc metric like “conver-
+sion rate” may correspond to reformulate SQL expressions (e.g.,
+total sales divided by unique visits) that must be annotated with
+precise semantics.
+Second,
+we
+leverage
+the
+SQL-to-Natural
+Language
+(SQL2NL) technique to address cold start scenarios where
+prior <Query, SQL> data is lacking. SQL statements are
+gathered from the enterprise’s data warehouse, prioritizing
+frequently executed or performance-critical queries. Using
+schema metadata (e.g., table descriptions and ﬁeld-level
+documentation), LLMs generate candidate natural language
+queries that represent what the SQL might accomplish.
+To address domain-speciﬁc nuances in this step, we apply
+ﬁlters to exclude irrelevant or ambiguous examples while
+prioritizing SQL statements that involve custom metrics,
+hierarchical
+relationships,
+or
+schema-linked
+constraints.
+Finally, the candidate <Query, SQL> pairs generated by LLMs
+are reviewed and reﬁned by domain experts to ensure both
+correctness and precision, creating a curated repository of
+validated examples. An illustrative example of SQL2NL is
+shown in Fig. 3, and its beneﬁts are analyzed in the ablation
+study in Section IV-C2.
+Fig. 3.
+SQL2NL prompt.
+Lastly, user feedback serves as an additional mechanism for
+constructing <Query, SQL> pairs. When the system generates
+inaccurate SQL, users provide corrections or clariﬁcations that
+help reﬁne these examples. After undergoing expert review,
+these corrected examples enrich the seed data repository and
+ensure continuous improvement over time. This iterative feed-
+back loop allows the system to better align with evolving user
+needs and adapt to domain-speciﬁc conventions.
+Once the seed data repository is constructed, these <Query,
+SQL> pairs are dynamically incorporated into the SQL gener-
+ation process using the ICL capability of LLMs. The system re-
+trieves the most contextually relevant examples from the repos-
+itory, guided by query similarity metrics such as embedding-
+based semantic similarity. These examples are then incorporated
+into the input prompt of an LLM as few-shot examples. By
+providing contextually aligned <Query, SQL> pairs as part
+of the prompt, our system enables the LLM to generate SQL
+statements that are not only syntactically correct but also adhere
+to domain-speciﬁc conventions and schema designs. Moreover,
+this approach eliminates the need for extensive ﬁne-tuning while
+ensuring that the system effectively adapts to the unique require-
+ments of the enterprise. By combining domain-speciﬁc queries,
+automated SQL-to-natural language generation, and iterative
+user feedback, our system constructs a robust foundation of seed
+data pairs. These pairs enhance the adaptability and contextual
+relevance of SQL generation, enabling effective deployment of
+LLMs in business environments where schema complexity and
+domain-speciﬁc nuances are critical considerations.
+3) Data Augmentation: SageCopilot incorporates two com-
+plementary data augmentation strategies to enhance the perfor-
+mance and adaptability of the model. These strategies are dis-
+cussed below, with an ablation study detailed in Section IV-C1.
+r Semantic-Preserving Augmentation – To bolster the ini-
+tial dataset, we utilize prompt engineering techniques to
+instruct the LLM to generate semantically equivalent but
+syntactically varied queries (denoted as Query’). Speciﬁ-
+cally, we design prompts that encourage the LLM to para-
+phrase queries while preserving their semantic integrity.
+To ensure quality, the augmented queries are validated
+using an automated semantic equivalence checker, and a
+subset is reviewed by human annotators for alignment and
+consistency.
+r Domain-to-NL2SQL Conversion – To generate seed
+datasets for new topics, this strategy leverages both
+domain-speciﬁc knowledge and LLM-based generation.
+Domain-speciﬁc table schemas are provided as input, and
+the LLM is prompted with an instruction framework to
+produce diverse and contextually relevant natural language
+Authorized licensed use limited to: Northeastern University. Downloaded on February 25,2026 at 02:37:40 UTC from IEEE Xplore.  Restrictions apply. 
+
+646
+IEEE TRANSACTIONS ON SERVICES COMPUTING, VOL. 19, NO. 1, JANUARY/FEBRUARY 2026
+(NL) queries alongside corresponding SQL queries. Hu-
+man experts rigorously validate these query-SQL pairs to
+ensure correctness and domain relevance. These curated
+examples are used as in-context learning (ICL) examples
+to support SQL generation in the online phase.
+To broaden linguistic coverage and improve robustness to
+paraphrases and domain-speciﬁc phrasing, we employ semantic-
+preserving augmentation in the ofﬂine phase and store the
+augmented NL–SQL pairs in a vector database. During online
+serving, IU-DM’s LLM prompts operate over these semantically
+diverse exemplars, and hybrid retrieval with slot feature extrac-
+tion ensures that critical domain terms are preserved in prompts
+even when surface forms vary. Our evaluation includes Chinese
+datasets (DuSQL subset and Real Trafﬁc), demonstrating cross-
+lingual operation without model ﬁne-tuning.
+4) Schema Linking Information Extraction: We utilize the
+analysis of SQL syntax trees for multiple dialects to convert
+our dataset from <Query, SQL> format into a <Query, Tables,
+Fields> format. This transformation creates a direct linkage
+between user-generated queries and their associated database
+ﬁelds.
+5) Memory Vector Database Integration: The memory vec-
+tor database is pivotal in bridging the gap between ofﬂine prepa-
+ration and online functionality. It encapsulates and consolidates
+data into a memory structure that unites both the original and
+augmented data pairs—including <Query, SQL, Tables, Fields
+> along with <Query’, SQL, Tables, Fields>—to support ro-
+bust and efﬁcient data retrieval and management.
+6) Practicality and Automation: The ofﬂine phase prioritizes
+automation and minimal expert touchpoints. Schema metadata
+are automatically extracted and aligned to target dialects. Seed
+NL–SQL pairs are primarily bootstrapped from existing query
+logs and dashboards, complemented by automated SQL2NL
+generation and semantic-preserving paraphrases. Human ex-
+perts perform lightweight validation to ensure domain ﬁdelity
+of candidates. These examples, together with schema-linking
+triples, are consolidated into a memory vector database for
+retrieval-time ICL. This process avoids LLM ﬁne-tuning and
+yields a compact, reusable exemplar base per domain.
+B. Online Phase
+In the online phase, the system delivers a reﬁned user ex-
+perience by discerning user intent and generating precise SQL
+queries through a series of LLM-driven modules. The system
+begins with intent recognition, proceeding to link questions to
+database schemas, and then crafting SQL statements guided by
+user queries paired with similar examples. The SQL Reﬂection
+module improves accuracy by correcting errors in SQL queries.
+After authentication, the database runs the SQL and results are
+processed.TheResultGenerationmoduletranslatestheseresults
+into textual analyses, avoiding visual complexity while still
+offering comprehensive insights. A Visualization component
+transforms data into charts. Additionally, a Forecast capability
+allows for the prediction of time-based data trends through sim-
+ple, intuitive LLM-user interactions. Overall, the online phase is
+a streamlined sequence ensuring precise, user-aligned outputs,
+from query interpretation to actionable predictions.
+1) Intent Understanding and Decision-Making (IU-DM): In
+real-world business settings, user inquiries can be complex or
+even incomplete, ranging from incomplete queries to follow-up
+questions and topics outside the domain. To handle this, an
+LLM-based agent for intent understanding and decision-making
+has been developed. This system consists of three main compo-
+nents: comprehensive intent assimilation, relevance assessment
+and chart type identiﬁcation. It uses user inquiries, example
+queries, and decision metrics to create detailed prompts that en-
+hance LLM responses. The system captures user requirements,
+assesses query relevance, applies direct plotting instructions,
+and identiﬁes chart types to ensure precise and relevant user
+interactions.
+Our Intent Understanding and Decision-Making (IU-DM)
+module is LLM-centered and governed by prompt-based de-
+cision heads (4). The templates encode soft criteria for rele-
+vance gating, visualization intent detection, and intent merge,
+which the LLM applies using its semantic generalization rather
+than brittle keyword rules. In practice, this allows IU-DM to
+handle synonyms and paraphrases and to normalize incomplete
+follow-ups into executable intents. Combined with our multi-
+recall/schema-linking and hybrid in-context retrieval, IU-DM
+routes queries robustly across languages and domains without
+ﬁne-tuning.
+Fig. 4 outlines the prompts used in the IU-DM module
+for effective intent understanding and decision-making. This
+module efﬁciently manages user queries with Large Language
+Models (LLMs) by analyzing inputs such as raw inquiries,
+similar example queries, and predeﬁned decision metrics. It then
+produces outputs like detailed prompts for LLM responses and
+makes decisions on query processing, which may involve visu-
+alization or further clariﬁcations. Key tasks include assessing
+query relevance to database information and determining the
+need for and type of chart visualization, as exempliﬁed in the
+intent representation prompt. Please refer to Appendix A for
+more details on the IU-DM module.
+2) Multiple Recall & Schema Linking: In SageCopilot, the-
+matic domain schemas involving 1 to N tables are depicted. A
+practical challenge in business scenarios is handling expansive
+schemas while staying within the contextual bandwidth limi-
+tations of LLM prompts. This renders it infeasible to integrate
+schema details for all N tables into a single prompt, as excessive
+schema information can negatively impact model performance.
+To address this limitation, we propose a schema linking module
+using a dual-phase methodology that facilitates efﬁcient and
+precise SQL generation.
+The ﬁrst phase is a multi-recall mechanism to identify the
+tables and ﬁelds most relevant to the user query. The second
+phase involves schema linking through dynamically generated
+prompts that adapt to the recalled tables and ﬁelds. In the multi-
+recall mechanism, two strategies are employed. The ﬁrst strat-
+egy leverages similarity-based recall, which evaluates semantic
+similarity between user queries and schema elements (tables and
+columns) using pre-trained embeddings such as BERT. Schema
+metadata,includingcolumnnames,datatypes,andtabledescrip-
+tions, are used to align with user intent. Cosine similarity scores
+guide the selection, with higher weights assigned to primary
+and key attributes. The second strategy employs recall from
+Authorized licensed use limited to: Northeastern University. Downloaded on February 25,2026 at 02:37:40 UTC from IEEE Xplore.  Restrictions apply. 
+
+LIAO et al.: SAGECOPILOT: AN LLM-EMPOWERED AUTONOMOUS AGENT FOR DATA SCIENCE AS A SERVICE
+647
+Fig. 4.
+The prompts used in the IU-DM module.
+pre-stored data by aggregating <Query, Tables, Fields> pairs
+ofﬂine.
+After tables are recalled, dynamic prompts are generated
+to link the user query to the most relevant schema elements.
+Prompts are designed to progressively incorporate schema in-
+formation. In initial layers, only table names and descriptions are
+included. Subsequent layers add relevant ﬁeld details or small
+Fig. 5.
+Schema linking prompt.
+Fig. 6.
+The miss-recalled example in similarity search.
+Fig. 7.
+SQL generation prompt.
+sample data where necessary. This progressive approach mini-
+mizes superﬂuous information while ensuring essential schema
+details are available to the model.
+The prompts are also constructed using context-aware lan-
+guage to minimize ambiguity and maximize the alignment be-
+tween user intent and schema structure. Additionally, they are
+designed to be modular and adaptable, ensuring compatibility
+across schemas with varying levels of complexity and domain-
+speciﬁc features. Fig. 5 presents the schema linking prompt
+and demonstrates how our framework dynamically adapts to
+different database structures.
+3) SQL Generation & In-Context Prompting: The module
+aims to generate precise SQL by merging intent understand-
+ing with schema linking through the in-context capabilities of
+LLMs. A key challenge is creating accurate prompts within a
+restricted token limit. As shown in Fig. 7, in-context examples
+consist of <Query, SQL> pairs retrieved from a vector database
+using similarity search. An input query is ﬁrst transformed into
+an embedding vector,2 which is then matched to the most similar
+<Query> for retrieving a <Query, SQL> pair via Inner Product
+(IP) distance. Due to token constraints, only top-K in-context
+examples are embedded in prompts. As depicted in Fig. 6,
+key examples can be omitted from the template because of
+unweighted IP similarity ranking, rendering terms like “closure
+rate” trivial compared to other common phrases. This leads to
+potential SQL generation errors if such critical terms are absent.
+2https://github.com/shibing624/text2vec
+Authorized licensed use limited to: Northeastern University. Downloaded on February 25,2026 at 02:37:40 UTC from IEEE Xplore.  Restrictions apply. 
+
+648
+IEEE TRANSACTIONS ON SERVICES COMPUTING, VOL. 19, NO. 1, JANUARY/FEBRUARY 2026
+The objective of this module is to accurately generate SQL
+statements by fusing intent comprehension with schema link-
+ing, utilizing the in-context capabilities of LLMs. A signiﬁcant
+technical challenge is crafting precise prompts with a restricted
+token input capacity. Typically, in-context examples in Fig. 7
+are comprised of <Query, SQL> pairs retrieved from a vector
+database via similarity search based on the queries. Initially,
+an input query is converted into an embedding vector.3 This
+vector is then compared to the closest <Query> to retrieval
+<Query, SQL> pair in the vector database by calculating the
+Inner Product (IP) distance, a ubiquitous measure in similarity
+searching. However, token input size constraints mean that it
+is not feasible to include all pertinent examples in the prompt
+template. Conventionally, only the top-K in-context examples
+are embedded in the template. A problematic case has been
+identiﬁed (as depicted in Fig. 6) where key examples may be
+omitted due to an unweighted IP similarity ranking, with signif-
+icant terms like “closure rate” making negligible contributions to
+the overall similarity in comparison with other identical phrases.
+It has been observed that such high-ranking examples often lack
+the critical term “closure rate,” potentially leading to incorrect
+SQL statement generation if the deﬁnition of “closure rate” is
+not present.
+To address this problem, we have introduced a slot feature
+extraction method combined with usual full-length query recall.
+The proposed hybrid recall strategy undertakes a two-step pro-
+cess: (1) employ the LLM to isolate the key terms and generate
+a shortened query to single out the most similar example, (2)
+merge this kernel example based on the key term with the
+array of results from the full-length query recall. This method
+yields more robust in-context examples than the conventional
+approach. Additionally, the in-context functionality of the LLM
+is leveraged to extract patterns and interpret information from
+contextual question examples, thus reﬁning the accuracy of the
+generated SQL statements.
+Consider a user query like “What is the trend in employee
+[Zhou Hui]’s monthly sales in [the second half of 2022]?” We
+ﬁrst extract relevant schema information related to the user’s
+query domain, similar to processes used in a chain supermarket
+context. Next, we determine the similarity between the user’s
+question and vectors in the vector database to select pertinent
+<Query, SQL> pairs, as depicted in Fig. 8. These examples
+provide contextual support for crafting an accurate SQL state-
+ment. Leveraging the ICL capability of the LLM agent, we blend
+schema information with example queries and responses, along
+with the initial user query, to produce an accurate SQL statement
+that fulﬁlls the user’s requirements, as illustrated in Fig. 9. The
+effectiveness of this hybrid approach is conﬁrmed in an ablation
+study discussed in Section IV-C4.
+For example, consider a user question such as “What is the
+trend in employee [Zhou Hui]’s monthly sales in [the second
+half of 2022]?” Initially, we extract the pertinent schema infor-
+mation from the domain of the user’s query, analogous to the
+procedures for a chain supermarket domain. We then compute
+the similarity between the user’s question and data vectors in the
+3https://github.com/shibing624/text2vec
+Fig. 8.
+In-context examples for SQL generation.
+Fig. 9.
+An example of the generated SQL.
+vector database to select the most suitable examples containing
+<Query, SQL> pairs, which is shown in Fig. 8. These examples
+serve as contextual aid in formulating a precise SQL statement.
+Utilizing the in-context learning capability of the LLM agent,
+we integrate the schema information with the exemplary queries
+and responses, alongside the original user inquiry, to generate
+an accurate SQL statement that addresses the user’s needs, as
+shown in Fig. 9. The superiority of this hybrid strategy is further
+validated in an ablation study detailed in Section IV-C4.
+4) SQL Reﬂection: The SQL Reﬂection module is con-
+structed to exploit the substantial capabilities of Large Language
+Models (LLMs) in detecting and rectifying ﬂawed SQL ex-
+pressions, effectively enhancing SQL generation accuracy. The
+mechanism employs meticulously designed prompt engineering
+strategies to guide the LLM in pinpointing and addressing SQL
+errors.
+The SQL Reﬂection module employs a multi-step error iden-
+tiﬁcation process: (1) syntax errors are detected via SQL pre-
+compilation tools; (2) hallucinated tables/columns are identi-
+ﬁed by comparing the parsed SQL against the actual database
+schema; (3) logical errors are addressed through prompt-based
+reasoning that guides the LLM to produce corrected SQL.
+This multi-faceted approach utilizes reinforcement-like feed-
+back mechanisms to iteratively reﬁne generated SQL expres-
+sions. The inclusion of explicit schema linking and schema-
+aware diagnostic evaluations ensures that all corrections are both
+contextually relevant and precise. Empirical validation (refer to
+Section IV-C5) demonstrates the practicality and robustness of
+this module. Results showcase signiﬁcant gains in SQL error de-
+tection and accurate resolution, illustrating the viability of com-
+bining rule-based diagnostics with LLM reﬂective capabilities
+in error-prone scenarios. Such a design not only resolves errors
+Authorized licensed use limited to: Northeastern University. Downloaded on February 25,2026 at 02:37:40 UTC from IEEE Xplore.  Restrictions apply. 
+
+LIAO et al.: SAGECOPILOT: AN LLM-EMPOWERED AUTONOMOUS AGENT FOR DATA SCIENCE AS A SERVICE
+649
+Fig. 10.
+Text analysis prompt.
+but also serves as a scalable architecture for SQL reﬁnement
+across varied database environments.
+5) Tool-Use & Authentication: SageCopilot accommodates
+SQLcommandexecutionacrossaspectrumofdialects,spanning
+MySQL, PostgreSQL, Flink SQL, Hive SQL and Spark SQL. It
+is noteworthy that queries executed via MySQL and PostgreSQL
+can deliver output at the precision of milliseconds. Nevertheless,
+Spark/Hive/Flink SQL execution duration may range from a few
+minutes to hours, inﬂuenced by variables including data scale
+and the intricacy of the SQL query. An integral component of
+SageCopilot is its granular authentication mechanism, aligned
+with the zero-trust security framework. Prior to the execution
+of any SQL query, the system rigorously veriﬁes whether users
+hold the necessary authorizations for access to the tables and
+columns referenced in the SQL statement within the allocated
+context. Progression to the execution phase is predicated on
+the assertive validation of such privileges. Conversely, if the
+user is found deﬁcient in the required permissions, SageCopilot
+immediately communicates the execution impediment to the
+user, citing inadequate authorization. This vigilant and precise
+authentication protocol is in strict adherence to the tenets of the
+zero-trust model, bolstering security protocols and assuring that
+SQL execution transpires strictly within the ambit of sanctioned
+parameters.
+6) Result Generation: Upon the retrieval of execution out-
+comes from the database engine, the result generation module
+commences its role in constructing the conclusive output for
+web-basedapplications.Demonstrationofthisprocessisevident
+in the lower right segment of Fig. 2, wherein a diversely format-
+ted report analogous to a portfolio is composed. Such a report
+encompasses textual analysis, visual representations through
+graphs and charts, and tabular data. Additionally, this phase
+may initiate further user interaction through the integration of
+predictive services and knowledge-driven analytical processes.
+Text Analysis: Predominantly, the result generation module
+acting online employs an LLM agent for the transformation
+of execution results, articulated in markdown or JSON-esque
+structures, into textual discourse. The composition of the textual
+output is not limited to the portrayal of SQL execution outcomes
+but also encapsulates a synthesized overview and preliminary
+analysis of the data. The prompt utilized for guiding the LLM
+agent is formulated in Fig. 10. In such an approach, the aspect of
+visualization has been deliberately decoupled, as a distinct mod-
+ule with an exclusive focus on graphical representation has been
+Fig. 11.
+An example of chart generation prompt.
+speciﬁcally crafted to augment the inherent capabilities of chart
+formationtotheirfullestextentwithoutcomplication.Itwarrants
+attention that under certain circumstances, users may venture
+inquiries pertaining to key, yet uncomputed, metrics—take for
+instance the “closure rate”, potentially non-existent within the
+current table schema. This presents a challenge as the LLM
+may ﬁnd itself incapable of delivering the anticipated response.
+A remedy to this quandary is the activation of a knowledge
+enhancement mechanism, prompting the user for the precise
+formula necessitated for the computation of the “closure rate”.
+Upon acquisition of the accurate or anticipated formula, the
+LLM is equipped to amalgamate it with the SQL execution
+ﬁndings, thereby generating an apt and tailored response.
+Visualization: SageCopilot adopts eChart for data visualiza-
+tion [18]. Speciﬁcally, SageCopilot utilizes the capabilities of
+an LLM agent to generate bar, line, and pie chart code in
+eCharts-compatible JSON format. However, due to the broad
+range of outputs possible from the LLM agent, the produced vi-
+sualizations may not consistently meet the user’s precise needs.
+To address this, we leverage the ICL of the LLM to adapt the
+prompt with examples that anticipate the user’s preferred chart
+types. This method is instrumental in enhancing the standard-
+ization and precision of the LLM-generated outputs, thus better
+fulﬁlling user expectations. An example of such prompt is shown
+in Fig. 11 and a case study on the visualization result is discussed
+in Section IV-D
+Authorized licensed use limited to: Northeastern University. Downloaded on February 25,2026 at 02:37:40 UTC from IEEE Xplore.  Restrictions apply. 
+
+650
+IEEE TRANSACTIONS ON SERVICES COMPUTING, VOL. 19, NO. 1, JANUARY/FEBRUARY 2026
+TABLE I
+OVERVIEW OF THE SYSTEM DEPLOYMENT
+Forecast: SageCopilot integrates Prophet4 with LLMs and
+prompts for enhanced time series forecasting and analysis.
+Prophet’s strengths in handling components like trend, season-
+ality, and holidays complement SageCopilot’s capabilities in
+data preprocessing and post-analysis. LLMs reﬁne Prophet’s in-
+puts and expand external regressors while translating numerical
+outputs into natural language, thus enhancing accessibility for
+decision-makers. The synergy allows Prophet to deliver struc-
+tured forecasts while LLMs provide contextual understanding
+and narrative explanations, facilitating comprehensive insights.
+The interaction does not involve direct computational collabora-
+tion but a complementary integration enhancing interpretability.
+Implementation details of Prophet (executed within Sage-
+Copilot): Given a user request, the agent (1) decomposes the
+request into a database-query intent and a forecasting intent;
+(2) generates and runs SQL to retrieve the historical series;
+(3) formats the result into Prophet’s expected input (e.g., ds
+as the timestamp and y as the target), optionally augmenting
+with available external regressors when the user intent or schema
+suggests relevant drivers; (4) generates a runnable Prophet script
+to ﬁt and forecast; and (5) converts outputs into an eCharts
+JSON conﬁguration and a concise natural-language summary.
+The LLM does not alter Prophet’s internal algorithm; it prepares
+inputs, constructs the Prophet script, and interprets outputs.
+Unless explicitly speciﬁed by the user, Prophet is run with
+default settings; user-speciﬁed preferences (e.g., horizon or in-
+clusion of regressors) are reﬂected in the generated script. A
+real-world case study illustrating this integration is presented in
+Section IV-D.
+C. Cross-Domain Adaptation and Onboarding
+SageCopilot decouples domain assets (schema annotations,
+curated exemplars, business-customized or proprietary knowl-
+edge and indicator deﬁnitions) from a domain-agnostic pipeline
+(retrieval, linking, reﬂection, execution). Ofﬂine onboarding
+builds a compact semantic foundation; online adaptation com-
+poses just-in-time context to answer intents robustly across
+heterogeneous schemas and engines, as shown in Table II. This
+separation minimizes per-domain engineering, accelerates on-
+boarding, and yields consistent behavior across diverse business
+contexts and backends.
+IV. DEPLOYMENT AND EVALUATION
+In the following section, we present the intricate details of
+deploying our novel SageCopilot within an industrial envi-
+ronment and carry out extensive experimental evaluations to
+4https://github.com/facebook/prophet
+TABLE II
+OFFLINE ONBOARDING VS. ONLINE ADAPTATION
+Fig. 12.
+System deployment architecture.
+assess the system’s overall performance and the impact of each
+optimization technique.
+A. Settings for Deployment and Evaluation
+In this section, we introduce the setup of SageCopilot for
+deployment and evaluation.
+1) Setups: Fig. 12 depicts the deployment of SageCopilot
+using a microservice architecture within a Kubernetes (K8s)
+cluster, with service conﬁgurations detailed in Table I. To
+enhance the system’s stability and performance, SageCopilot
+strategically avoids direct connections between Python web
+services, such as the query service, and the MySQL database.
+Instead, a Java-based web service, namely the manager service,
+acts as an intermediary, managing front-end user requests and
+SQL database interactions. This design choice aims to enhance
+system throughput and reduce stability risks associated with
+Authorized licensed use limited to: Northeastern University. Downloaded on February 25,2026 at 02:37:40 UTC from IEEE Xplore.  Restrictions apply. 
+
+LIAO et al.: SAGECOPILOT: AN LLM-EMPOWERED AUTONOMOUS AGENT FOR DATA SCIENCE AS A SERVICE
+651
+Fig. 13.
+The difﬁculty of Real Trafﬁc Dataset and DuSQL.
+direct Python-MySQL connections. Additionally, a MySQL
+database is implemented prior to employing operations within
+the vector database to maintain index uniqueness. Based on this
+foundational deployment, we perform a series of experiments to
+ascertain the efﬁciency and efﬁcacy of the deployed system and
+to conduct an ablation study for each optimization strategy in
+SageCopilot.
+2) Datasets: The DuSQL dataset, frequently used to eval-
+uate the accuracy of Text-to-SQL parsing across various
+databases, challenges models to adapt to new database schemas.
+The dataset contains 23,797 high-quality Chinese Text-SQL
+pairs over 200 distinct databases. In this investigation, we opted
+for 10 databases from DuSQL to constitute the thematic domain
+in SageCopilot, following the ofﬂine phase described in Sec-
+tion III-A. The dataset was segmented into 700 exemplar set
+entries and 215 test set entries.
+We developed the Real Trafﬁc Dataset from the data man-
+agement platform of Baidu Inc. Owing to privacy concerns,
+the obtained data primarily consisted of redacted real tables.
+Utilizing these sanitized tables and through manual curation,
+we composed 6 thematic domains that include 10 data tables.
+The dataset was segmented into 212 exemplar set entries and
+61 test set entries, with each entry comprising both the input
+queries and the corresponding SQL query statements.
+To evaluate the difﬁculty of the Real Trafﬁc Dataset and
+DuSQL datasets, we employed the NL2SQL evaluation method-
+ology provided by the BIRD benchmark [19], which considers
+four dimensions: comprehension of the question, the require-
+ment for external knowledge, complexity of the data, and com-
+plexity of SQL. Each dimension was rated on a scale from 1 to 3.
+Samples accumulating a total score under 4 were deemed easy,
+those between 5 and 6 were regarded as of medium difﬁculty, and
+samples with scores of 7 or higher were classiﬁed as challenging.
+Fig. 13 illustrate the difﬁculty distribution across the datasets.
+Toassesscross-domainportability,wecouplethemulti-database
+DuSQLsubset(10databases)withthemulti-domainRealTrafﬁc
+Dataset (6 thematic domains), enabling evaluation across hetero-
+geneous schemas and business contexts.
+3) Metrics: To assess the performance of the proposed Sage-
+Copilot, we evaluate it from two perspectives: (1) the quality of
+SQL generated in the SageCopilot pipeline, and (2) the quality of
+answers as an automated data analysis tool. For the ﬁrst aspect,
+we adopt the mainstream NL2SQL metrics such as exact match
+and execution accuracy. We also explore one human-aligned
+metric as one supplementary indicator. For the second one, we
+Fig. 14.
+Bad case for EX metric.
+cooperate a team of experts (trained with the domain knowledge)
+to rate the answers based on a panel of human-designed criteria.
+The detailed deﬁnition for each metric is illustrated as follows:
+r Exact Match (EM), namely the percentage of questions
+whose predicted SQL query is equivalent to the gold SQL
+query, is widely used in text-to-SQL tasks. Suppose that Yi
+isthei-thgroundtruthSQLand ˆYi isthei-thpredictedSQL,
+EM can be computed by EM = [N
+i=1 1(Yi, ˆYi)]/N.
+r Execution Accuracy (EX), namely the percentage of
+questions whose predicted SQL obtains the correct result,
+assumes that each SQL has a result. Considering the result
+Vi is executed by the Yi and ˆVi is executed by the ˆYi, EX
+can be computed by EX = [N
+i=1 1(Vi, ˆVi)]/N, where
+1(·) is an indicator function, which can be represented as
+1(V, ˆV ) =
+
+1, V = ˆV
+0, V ̸= ˆV .
+r Human-aligned Accuracy (HA) is introduced to recon-
+cile the discrepancies between traditional benchmark eval-
+uation metrics and actual human preferences. To illustrate
+in Fig. 14, consider a case from the test set.
+In this instance, the query produced by the LLM (listed
+ﬁrst) was identiﬁed as erroneous based on the established
+gold standard (listed second). Notably, the generated query
+includes an additional computed column indicating the
+count of students, presenting a more descriptive outcome.
+According to traditional Evaluation Accuracy (EX), such
+an informative response would be deemed incorrect. To ad-
+dress and potentially ameliorate this sort of misalignment,
+HA has been devised as a means to measure the extent
+to which generated SQL queries align with human-alike
+judgment. Speciﬁcally, HA evaluates the suitability of a
+generated SQL query by executing both the predicted and
+gold standard queries, and using their respective outputs to
+generate natural language responses to the input question.
+The accuracy of a generated query is then assessed by
+determining whether the natural language answer derived
+from the output of the predicted query is correct, taking
+into account the input question and the reference answer
+produced from the output of the gold standard query. The
+response acquired from the language model is binary: Yes
+or No.
+r Artiﬁcial Assessment (AA) is a manual expert scoring in-
+dex, composed of evaluations across multiple dimensions,
+including two text response indicators and three visual
+chart indicators. The text response indicators consist of
+data consistency and response richness, while the visual
+chart indicators consist of data consistency, display capa-
+bility, and display rationality. A detailed description can
+be found in the scoring Table III. We will also calculate
+Authorized licensed use limited to: Northeastern University. Downloaded on February 25,2026 at 02:37:40 UTC from IEEE Xplore.  Restrictions apply. 
+
+652
+IEEE TRANSACTIONS ON SERVICES COMPUTING, VOL. 19, NO. 1, JANUARY/FEBRUARY 2026
+TABLE III
+SCORING SYSTEM FOR THE AA METRICS
+TABLE IV
+LLM BASE EXECUTION ACCURACY (EX) COMPARISON
+TABLE V
+PERFORMANCE OF ONLINE SERVING WITH SAGECOPILOT
+the total score to demonstrate comprehensive performance
+assessment.
+In our experiments, EX credits any SQL that yields the correct
+result, whereas EM is stricter and sensitive to surface-form
+differences from the gold SQL; consequently, methods that
+target execution repair (e.g., SQL Reﬂection) can increase EX
+without increasing and sometimes slightly decreasing EM.
+4) LLM Models for Comparisons: In the evaluation of funda-
+mental NL2SQL task performance, ErnieBot’s capabilities were
+compared with other Large Language Models (LLMs), with
+focus on features such as ﬁne-tuning and in-context learning
+proﬁciencies. As indicated in Table IV, Ernie-3.5 and ChatGPT
+demonstrate superior execution accuracy (EX), particularly in
+few-shot prompting scenarios, afﬁrming its robustness in this
+context. Considering the price, we adopt Ernie-3.5 as the foun-
+dational LLMs for SageCopilot. Furthermore, SageCopilot is
+designed to be adaptable, capable of augmenting the inherent
+functionalities of various other LLMs as alternatives, thereby
+extending the range of their native abilities.
+B. End-to-End Performance Evaluation
+1) Internal
+Performance
+Analysis
+of
+SageCopilot: In
+TableV,wepresenttheexperimentalresultsoftheSageCopilot’s
+overall
+performance.
+The
+assessed
+components
+of
+the
+experiment revolve around SQL query accuracy and the
+multifaceted Artiﬁcial Assessment metric, which incorporates
+evaluations from both text and visual perspectives.
+Key ﬁndings indicate that SageCopilot achieved moderate
+SQL Accuracy, with Exact Match (EM) at 45.6%, Execution
+Accuracy (EX) at 72.6%, highlighting correct results despite
+non-exact matches, and Human-aligned Accuracy (HA) slightly
+higher at 77.8%, showing competency in complex queries.
+The Artiﬁcial Assessment yielded a high score in Text Data
+Consistency (T1) at 3.26/4, but lower in Text Richness (T2)
+at 1.42/3 since we specify the briefness in the prompt 10. Vi-
+sual Charts evaluation gave middling scores: Data Consistency
+(V1) at 1.34/2, Display Capability (V2) at 0.73/1, and Display
+Rationality (V3) at 1.24/2, suggesting reliable numerical data
+representationbut areas toenhanceinvisual displayandchart se-
+lection. The cumulative score for the Artiﬁcial Assessment(AA),
+denoted as SUM, adds these individual aspects to form an
+aggregate score. For SageCopilot, a SUM of 7.95 was obtained,
+showcasing the system’s notable but imperfect capability in
+delivering both textually and visually coherent data representa-
+tions. Considering multi-round querying as a more complex task
+than single-round querying due to the iterative nature of reﬁning
+queries based on user feedback and maintaining context over
+multiple interactions, the performance measures reﬂected in AA
+demonstrate the challenging nature of multi-round querying. In
+terms of response time, SageCopilot calls upon the LLM’s API
+1 to 7 times depending on user intent for each query, with an
+average response time ranging from 3 to 26 seconds.
+2) External Benchmarking Against State-of-the-Art Systems:
+To address the need for comparative analysis with external state-
+of-the-art NL2SQL systems, we conducted a focused bench-
+marking study using the medium-to-high difﬁculty Real Traf-
+ﬁc Dataset. This evaluation speciﬁcally targets the end-to-end
+NL2SQL generation capability, measuring both EX and HA.
+We compared SageCopilot (utilizing Ernie-3.5 as its underlying
+LLM) against a diverse set of contemporary LLMs, including
+SQL-specialized, code-specialized, and general-purpose mod-
+els. The results, summarized in Table VI, indicate that while the
+base Ernie-3.5 model alone (EX: 44.4%, HA: 44.4%) exhibits
+lower performance compared to several general-purpose SOTA
+LLMs like GPT-5 (EX: 50.0%, HA: 61.1%) and DeepSeek-V3.1
+(EX: 55.6%, HA: 55.6%), the SageCopilot framework signiﬁ-
+cantly enhances its performance, achieving superior results (EX:
+66.7%, HA: 72.2%). This demonstrates that the SageCopilot
+framework provides substantial gains over using the underlying
+LLM in isolation.
+The performance improvement is primarily attributed to
+the framework’s semantic governance module, which includes
+the construction of semantic views to simplify complex SQL
+logic (as detailed in Appendix B.1). For real-world business
+queries often involving intricate multi-table joins, complex
+aggregations, and sophisticated domain-speciﬁc business logic
+spanning hundreds of lines, this simpliﬁcation is crucial for
+generating executable SQL with higher accuracy. By abstracting
+complex underlying data operations into simpler view-based
+representations, SageCopilot reduces the cognitive load on
+the LLM during SQL generation, leading to more reliable and
+Authorized licensed use limited to: Northeastern University. Downloaded on February 25,2026 at 02:37:40 UTC from IEEE Xplore.  Restrictions apply. 
+
+LIAO et al.: SAGECOPILOT: AN LLM-EMPOWERED AUTONOMOUS AGENT FOR DATA SCIENCE AS A SERVICE
+653
+TABLE VI
+COMPARISON OF EXTERNAL BENCHMARKING ON END-TO-END NL2SQL SYSTEMS
+TABLE VII
+THE COMPARISON OF DATA AUGMENTATION STRATEGIES
+correctoutputs.ThisarchitecturaladvantageallowsSageCopilot
+to
+achieve
+better
+end-to-end
+performance
+even
+with
+a
+competitively capable, but not necessarily top-tier, base
+LLM, substantiating its value as an industry-grade automated
+data science pipeline.
+C. Ablation Test
+The ablations quantify how domain-agnostic components
+(multi-recall schema linking, hybrid in-context retrieval with
+slot features, SQL reﬂection) and domain-speciﬁc assets (gov-
+erned schemas, curated/SQL2NL seed pairs, semantic aug-
+mentation) contribute to robustness across varied domains and
+schemas. To the best of our knowledge, SageCopilot stands out
+as the ﬁrst industrial-level, end-to-end solution that is designed
+to revolutionize the way we interact with data. To contextualize
+our work within the current industrial landscape, we provide a
+brief speculative comparison based on public demos and limited
+trials of representative systems such as DataGPT, Smart BI
+tools (e.g., Tableau, Sugar BI), and traditional data warehouses
+(e.g., Arctic Data). These systems are either not end-to-end,
+not open-sourced, or lack technical disclosures, limiting em-
+pirical benchmarking. Nonetheless, in contrast to these tools,
+SageCopilot offers distinctive advantages such as comprehen-
+sive language support (including Chinese), ﬂexible domain-
+speciﬁc agents, broad database compatibility (e.g., MySQL,
+PostgreSQL, HiveSQL, FlinkSQL, SparkSQL), dynamic nat-
+ural language query processing, and multi-turn conversation
+capabilities—features often absent or limited in existing solu-
+tions. Given the speculative nature of this comparison, we focus
+our evaluation on ablation studies to objectively quantify the
+contributions of each component in SageCopilot.
+1) Data Augmentation: In the conducted ablation studies,
+we sought to evaluate the efﬁcacy of SageCopilot, through
+different data augmentation strategies. The experiments were
+categorized into four distinct sets: i) the zero-shot approach,
+devoidofanyexemplarcollection,relyingsolelyonthelanguage
+model’s inherent capabilities; ii) the ER method, which lever-
+ages exemplar sets to invoke the model’s in-context learning
+by recalling similar instances; iii) the ER+SA method—our
+proposed approach—where similar instances are retrieved from
+a semantically augmented exemplar set; iv) the ER+D2N ap-
+proach, where the recall procedure is applied to an exemplar set
+enriched with domain-speciﬁc NL2SQL augmentations.
+Fig. 15.
+The recall rate of examples using SQL2NL.
+The outcomes, detailed in Table VII, indicate a marked en-
+hancement in both EM and EX when the ER process is em-
+ployed. Incremental improvements were further observed with
+our proposed ER+SA strategy, albeit to a lesser extent. However,
+the introduction of the domain to NL&SQL data augmentation
+(ER+D2N) did not result in any notable performance gains. The
+stagnation observed with the ER+D2N augmentation suggests
+that the similarity in distribution between the augmented and
+test samples was too great to provide a signiﬁcant beneﬁt.
+In contrast, the implementation of both example recall and
+semantic-preserving augmentation—the cornerstone techniques
+of SageCopilot—demonstrate effective enhancements to the
+model’s performance.
+2) SQL2NL: The SQL2NL mechanism signiﬁcantly en-
+hances the automation of data augmentation and the optimiza-
+tion of tasks after system deployment. Implementing SQL2NL-
+enhanced examples improves the Execution (EX) score for
+SageCopilot from 56.2% to 81.3% within the chain supermarket
+domain, which is part of a broader Real Trafﬁc Dataset, where
+the accuracy of SQL2NL reaches 92.0%. To validate SQL2NL’s
+efﬁcacy, the recall capability of the vector database was tested
+by mixing SQL2NL-generated examples with irrelevant ones
+withinthedomain.Startingwith16accurateandexecutableSQL
+queries, a Language Model produced three related questions per
+query, yielding 48 SQL2NL-enhanced questions. These were
+introduced into vector databases with incremental additions of
+unrelated examples, as shown in Fig. 15. The data enhanced
+by SQL2NL demonstrated high congruity in aligning with the
+original questions, even in the presence of a sizable amount
+of extraneous data, thereby validating SQL2NL’s efﬁcacy as a
+powerful mechanism for generating foundational seed data. The
+LLM prompt conﬁguration is discussed in Fig. 3.
+3) Schema Linking: In the context of multiple recall, each
+retrieval channel should strive to maintain independence to
+ensure that the target table can appear in the candidate set. The
+evaluation mainly focuses on two aspects: (1) whether the target
+table appears in the candidate set; and (2) the desirability of the
+target table appearing towards the beginning of the candidate
+set. Fig. 16 presents the results of four retrieval experiments
+conducted on 100 actual business tables, with most tables
+Authorized licensed use limited to: Northeastern University. Downloaded on February 25,2026 at 02:37:40 UTC from IEEE Xplore.  Restrictions apply. 
+
+654
+IEEE TRANSACTIONS ON SERVICES COMPUTING, VOL. 19, NO. 1, JANUARY/FEBRUARY 2026
+Fig. 16.
+Comparison of schema linking strategies.
+containing over 100 ﬁelds. The experimental results indicate
+that the retrieval strategies achieved recall of 50%, 83%, 83%,
+and 92% respectively. This suggests that the strategy based on
+direct table schema similarity performed notably better than
+others based on summarization of schema details, key words
+and the values of the key words. It’s also important to consider
+the potential implications of the experimental results. The high
+recall of the direct table schema similarity strategy indicates
+its effectiveness in identifying relevant tables and columns
+for a given query. In contrast, the lower recall achieved by
+the summarization-based strategies may suggest limitations in
+capturing the nuanced details necessary for precise retrieval.
+4) Slot Feature Extraction: In response to the observed chal-
+lenge where a user’s query regarding “close ratio” is obscured
+by extraneous language (e.g., in Appendix B.3), resulting in
+potential retrieval of non-relevant instances by schema matching
+techniques, we introduce the Slot Feature Extraction (SFE)
+approach. Thismethod’sefﬁcacyisrigorouslyevaluatedthrough
+a direct comparison, utilizing EM and EX metrics, on a tar-
+geted subsection of our comprehensive real-trafﬁc dataset. The
+selected subset comprises 81 samples belonging to a domain
+noted for its susceptibility due to the relatively brief nature of
+the key terms within broader textual contexts. Our empirical
+study, discussed in Section III-B3, reveals that when the Inner
+Product (IP) similarity metric is employed for example retrieval,
+there is a heightened probability of mismatches particularly
+when the key phrase is less prevalent within the data. Such
+circumstances are graphically depicted in Fig. 6, highlighting
+how these mismatches can precipitate a signiﬁcant decline in the
+recall rate of relevant in-context examples from this particular
+dataset sector.
+The implementation of our method without SFE (SFE w/o)
+served as the baseline for the comparison. This baseline deliv-
+ered an EX of 53.1% and an EM of 81.5%, revealing the inherent
+challenge in accurately matching short key phrases within the
+data. Upon integrating the SFE technique (SFE w/), we observed
+a notable improvement in performance, where EX improved by
+7.0 percentage points, reaching 56.8%, and EM increased by
+4.5 percentage points, achieving an 85.2% success rate. These
+enhancements underscore the signiﬁcance of the SFE approach
+in boosting the system’s capability to discern and correctly
+retrieve pertinent instances based on key terms.
+5) Effect of SQL Reﬂection: In our study, we conducted an
+ablation experiment to validate our SQL Reﬂection methodol-
+ogy by addressing diverse SQL errors such as syntax incon-
+sistencies, references to non-existent tables, and omissions of
+TABLE VIII
+ABLATION STUDY WITH SLOT FEATURE EXTRACTION (SFE) STRATEGY
+TABLE IX
+ABLATION STUDY WITH SQL REFLECTION STRATEGY
+Fig. 17.
+The effect of human-to-machine feedback.
+requisite columns. Our dataset, composed of 20 distinct samples,
+employed Evaluation Metrics (EM) and Execution Accuracy
+(EX) as benchmarks for assessing our strategy’s efﬁcacy. The
+SQL Reﬂection strategy, which operates without detailed SQL
+error annotations, was employed as the baseline under review
+and is summarized in Table IX. This baseline achieved an
+EM score of 65% and an EX rate of 15%. However, after
+integrating explicit SQL error descriptions into the learning
+model, our results showed a modest 5% decline in EX, while
+EM improved signiﬁcantly by 15%. SQL Reﬂection is designed
+to improve executable correctness. The reﬂected queries may
+adopt semantically equivalent but structurally different forms
+(e.g., subquery wrapping, reordered predicates, alternate join
+realizations), which can raise EX while not satisfying the strict
+single-reference EM criterion. These ﬁndings substantiate the
+effectiveness of descriptive error integration in SQL query gen-
+eration methodologies.
+6) Effect of Miscellaneous Designs: The system enhances
+the performance of LLMs through two innovative forms of feed-
+back: human-to-machine and machine-to-human. By correcting
+errors in SQL responses manually and feeding these corrections
+back into the system, human-to-machine feedback signiﬁcantly
+improves system accuracy, as visually represented in Fig. 17.
+Meanwhile, machine-to-human feedback recognizes the need
+for human intervention when the system’s responses may not
+be accurate. In such cases, the dialogue system seeks additional
+information from a human to clarify ambiguous queries. This
+ensures responses are precise and tailored to the user’s intended
+Authorized licensed use limited to: Northeastern University. Downloaded on February 25,2026 at 02:37:40 UTC from IEEE Xplore.  Restrictions apply. 
+
+LIAO et al.: SAGECOPILOT: AN LLM-EMPOWERED AUTONOMOUS AGENT FOR DATA SCIENCE AS A SERVICE
+655
+Fig. 18.
+An example of machine-to-human feedback.
+meaning, creating a dynamic, iterative loop that continuously re-
+ﬁnes the system’s performance and user experience. The efﬁcacy
+of two additional enhancements, which signiﬁcantly improve
+both the effectiveness and the user experience of our system, is
+summarized below.
+Human-to-Machine Feedback: Recognizing the limitations
+and variability in outputs from Large Language Models (LLMs),
+it is imperative to establish a feedback loop from humans to
+machines. This allows for improved precision through active
+adjustments. In particular, when the system encounters an erro-
+neous case, the incorrect SQL generated in response to a query
+is manually rectiﬁed and incorporated into the memory base
+to immediately enhance system performance. As depicted in
+Fig. 17, implementing this human-to-machine feedback mech-
+anism showcases a marked advancement in output quality.
+Machine-to-Human Feedback: Traditionally, LLMs deliver
+responses to queries without regard for result accuracy, which
+can be problematic. To rectify this, our system implements a
+machine-to-human feedback process. As illustrated in Fig. 18,
+when there is uncertainty in providing an accurate response,
+the system solicits human intervention. The response is then
+formulated using the system’s capacity for multi-turn dialogue
+comprehension, but only after receiving a question that has been
+clariﬁedbyahumanoperator. Thisisoperationalizedbydeﬁning
+a set of clariﬁcation parameters alongside acceptable values. If
+a query involves a clariﬁcation parameter and the inferred value
+does not align with the anticipated range, a request for further
+clariﬁcation is initiated. This process ensures that responses
+are not only accurate but are also reﬂective of the user’s true
+intentions, optimizing the system’s reliability through iterative
+machine-to-human feedback.
+D. Cases on Visualization and Prediction
+Here, we present two cases on SageCopilot using eCharts
+for visualization of query results [18]. Fig. 19 illustrates the
+result of the query “Zhou Hui’s sales trend in 2021”, complete
+with interactive features, including title, legend, and tooltips.
+Another example is that, in analyzing product proﬁts for March
+2022, the SQL results are used to populate a bar chart, effectively
+highlighting rankings with product names on the x-axis and total
+proﬁts on the y-axis (refer to Fig. 20). Both visualization cases
+are obtained by eCharts with JSON generated by SageCopilot
+through prompting the LLM. The prompt has been exempliﬁed
+in Fig. 11.
+Fig. 19.
+An example of generated line chart.
+Fig. 20.
+An example of generated bar chart.
+Fig. 21.
+A forecast result guided by SageCopilot. SageCopilot decomposes
+the request, executes SQL to obtain history, generates and executes a Prophet
+script internally, and returns both visualization and narrative interpretation.
+Fig. 21 illustrates an example of time-series forecasting using
+Prophet within SageCopilot. In a sales scenario, the user’s query
+is “Please predict the change in sales volume for February 2024
+based on historical volume data from January 2020 to January
+2024”. SageCopilot decomposes this query into a database query
+intent and a time-series prediction intent. Given the schema
+and the database query intent, SageCopilot generates the SQL
+scripts and obtains the results through executing the scripts.
+Then, given the historical data and the time-series prediction
+intent, SageCopilot generates the script of Prophet to make the
+prediction and visualize the data and prediction results.
+V. DISCUSSION
+This section makes explicit the practical constraints observed
+in real-world usage and evaluation of the system. We brieﬂy
+motivate why these aspects matter, then summarize limitations
+related to scalability/throughput, computational costs, and edge-
+case handling. These points are intended to clarify operational
+trade-offs for deployment and to complement the results and
+designs presented in the paper.
+Authorized licensed use limited to: Northeastern University. Downloaded on February 25,2026 at 02:37:40 UTC from IEEE Xplore.  Restrictions apply. 
+
+656
+IEEE TRANSACTIONS ON SERVICES COMPUTING, VOL. 19, NO. 1, JANUARY/FEBRUARY 2026
+r Scalability and throughput: Because end-to-end orchestra-
+tion can involve multiple interactions and back-end oper-
+ations, response time and peak throughput can vary with
+intent complexity and workload. Very wide or evolving
+schemas may require multi-stage retrieval/mapping that
+can miss rarely signaled ﬁelds, and external service limits
+can throttle bursts.
+r Computational costs: Overall cost reﬂects both model us-
+age (tokens and interaction rounds) and data-engine execu-
+tion. Costs and latency tend to grow with schema breadth
+and query complexity, and practical parallelism may be
+constrained by provider quotas and deployment budgets.
+r Edge cases and failure modes: Heterogeneous SQL di-
+alects, ambiguous or underspeciﬁed intents, and undeﬁned
+derived metrics can lead to residual query or interpretation
+errors that require clariﬁcation. Automated checks and re-
+pair reduce, but do not eliminate, logical issues; generated
+visualizations may occasionally need minor adjustments.
+VI. CONCLUSION
+In summary, this paper introduces SageCopilot, an advanced
+system that automates data science pipelines by integrating
+LUIs, AutoAgents, databases, data visualizers, and LLMs. With
+a two-phase design combining online In-Context Learning (ICL)
+with ofﬂine demonstration preparation, SageCopilot effectively
+handles natural language instructions for querying, analysis, and
+visualization tasks, delivering accurate and efﬁcient results with
+minimal human intervention.
+Key insights from real-world deployments have shaped Sage-
+Copilot, enhancing system performance through strategies like
+the “multiple recall and schema linking” paradigm to address
+tokeninputlengthlimitationsandrestructuringqueriesviaviews
+to improve SQL accuracy by 50%. Continuous collection of
+demonstrations has further reﬁned ICL accuracy through online
+feedback. While SageCopilot successfully tackles many chal-
+lenges, limitations such as handling SQL edge cases and sub-
+jective evaluation nuances remain. Future reﬁnements, including
+reinforcement learning for dynamic prompt optimization [20],
+could enhance adaptability and robustness, providing valuable
+opportunities for further development. These directions under-
+score SageCopilot’s current contributions while highlighting its
+potential for advancing automated data science systems.
+REFERENCES
+[1] V. Zhong, C. Xiong, and R. Socher, “Seq2SQL: Generating structured
+queries from natural language using reinforcement learning,” 2017,
+arXiv:1709.00103.
+[2] X. Xu, C. Liu, and D. Song, “SQLNet: Generating structured
+queries from natural language without reinforcement learning,” 2017,
+arXiv:1711.04436.
+[3] B. Wang, R. Shin, X. Liu, O. Polozov, and M. Richardson, “RAT-SQL:
+Relation-aware schema encoding and linking for text-to-SQL parsers,”
+in Proc. 58th Annu. Meeting Assoc. Comput. Linguistics, jul. 2020,
+pp. 7567–7578.
+[4] L. Wang et al., “DUSQL: A large-scale and pragmatic chinese text-to-SQL
+dataset,” in Proc. Conf. Empirical Methods Natural Lang. Process., 2020,
+pp. 6923–6935.
+[5] M. S. Islam, C. Liu, and R. Zhou, “On modeling query reﬁnement by
+capturing user intent through feedback,” in Proc. 23rd Australas. Database
+Conf., vol. 124, 2012, pp. 11–20.
+[6] Y. Gan et al., “Natural SQL: Making SQL easier to infer from natural
+language speciﬁcations,” in Proc. Findings Assoc. Comput. Linguistics:
+EMNLP 2021, 2021, pp. 2030–2042.
+[7] V. C. Hu et al., “Guide to attribute based access control (ABAC) deﬁnition
+and considerations (draft),” NIST Special Publication, vol. 800, no. 162,
+pp. 1–54, 2013.
+[8] S.M.Ali,N.Gupta,G.K.Nayak,andR.K.Lenka,“BigDatavisualization:
+Tools and challenges,” in Proc. 2nd Int. Conf. Contemporary Comput.
+Informat., 2016, pp. 656–660.
+[9] H. Xiong, J. Bian, S. Yang, X. Zhang, L. Kong, and D. Zhang, “Natural
+language based context modeling and reasoning with LLMs: A tutorial,”
+2023, arXiv:2309.15074.
+[10] N. Deng, Y. Chen, and Y. Zhang, “Recent advances in text-to-SQL: A
+survey of what we have and what we expect,” in Proc. 29th Int. Conf.
+Comput. Linguistics, 2022, pp. 2166–2187.
+[11] J. Achiam et al., “GPT-4 technical report,” 2023, arXiv:2303.08774.
+[12] R. A. Poldrack, T. Lu, and G. Beguš, “AI-assisted coding: Experiments
+with GPT-4,” 2023, arXiv:2304.13187.
+[13] Y. Lin et al., “Speciality vs generality: An empirical study on catastrophic
+forgetting in ﬁne-tuning foundation models,” 2023, arXiv:2309.06256.
+[14] X. L. Dong, S. Moon, Y. E. Xu, K. Malik, and Z. Yu, “Towards next-
+generation intelligent assistants leveraging LLM techniques,” in Proc. 29th
+ACM SIGKDD Conf. Knowl. Discov. Data Mining, 2023, pp. 5792–5793.
+[15] A. Rebei, “Fine-tuning language models for context-speciﬁc SQL query
+generation,” 2023, arXiv:2312.02251.
+[16] Z. Wang et al., “Learning to prompt for continual learning,” in Proc.
+IEEE/CVF Conf. Comput. Vis. Pattern Recognit., 2022, pp. 139–149.
+[17] W. Zhang, Y. Shen, W. Lu, and Y. Zhuang, “Data-copilot: Bridging billions
+of data and humans with autonomous workﬂow,” in Proc. ICLR 2024
+Workshop Large Lang. Model (LLM) Agents, 2024. [Online]. Available:
+https://openreview.net/forum?id=iUEBnQyfWE
+[18] D. Li et al., “ECharts: A declarative framework for rapid construction of
+web-based visualization,” Vis. Inform., vol. 2, no. 2, pp. 136–146, 2018.
+[19] J. Li et al., “Can LLM already serve as a database interface? A big bench
+for large-scale database grounded text-to-SQLs,” in Proc. 37th Int. Conf.
+Neural Inf. Process. Syst., Art. no. 1835, 2023.
+[20] M. Deng et al., “RlPrompt: Optimizing discrete text prompts with re-
+inforcement learning,” in Proc. Conf. Empirical Methods Natural Lang.
+Process., Dec. 2022, pp. 3369–3391.
+Authorized licensed use limited to: Northeastern University. Downloaded on February 25,2026 at 02:37:40 UTC from IEEE Xplore.  Restrictions apply. 

@@ -1,0 +1,2204 @@
+AOI: Context-Aware Multi-Agent Operations via Dynamic Scheduling and
+Hierarchical Memory Compression
+Zishan Bai1†, Jing Luo2, Ziyi Ni3, Enze Ge4, Jiacheng Shi5,
+Yichao Zhang6, Jiayi Gu7, Zhimo Han8, Riyang Bao9, Junfeng Hao10†,
+1Columbia University
+2Chongqing University
+3Institute of Automation, Chinese Academy of Sciences
+4AI Agent Lab, Vokram Group
+5College of William and Mary
+6University of Texas
+7Central University of Finance and Economics
+8Zhengzhou University of Light Industry
+9Emory University
+10Department of Nephrology, Affiliated Hospital of Guangdong Medical University
+Correspondence: ygzhjf85@gmail.com
+Abstract
+The proliferation of cloud-native architectures,
+characterized by microservices and dynamic or-
+chestration, has rendered modern IT infrastruc-
+tures exceedingly complex and volatile. This
+complexity generates overwhelming volumes
+of operational data, leading to critical bottle-
+necks in conventional systems: inefficient in-
+formation processing, poor task coordination,
+and loss of contextual continuity during fault di-
+agnosis and remediation. To address these chal-
+lenges, we propose AOI (AI-Oriented Opera-
+tions), a novel multi-agent collaborative frame-
+work that integrates three specialized agents
+with an LLM-based Context Compressor. Its
+core innovations include: (1) a dynamic task
+scheduling strategy that adaptively prioritizes
+operations based on real-time system states, (2)
+a three-layer memory architecture comprising
+Working, Episodic, and Semantic layers that
+optimizes context retention and retrieval. Ex-
+tensive experiments on synthetic and real-world
+benchmarks show that AOI achieves 72.4%
+context compression while preserving 92.8%
+critical information, improves task success to
+94.2%, and reduces MTTR by 34.4% over the
+best baseline. This work presents a paradigm
+shift towards scalable, adaptive, and context-
+aware autonomous operations, enabling robust
+management of next-generation IT infrastruc-
+tures with minimal human intervention.
+1
+Introduction
+Modern IT infrastructures have evolved into highly
+distributed, cloud-native systems composed of mi-
+croservices, containerized workloads, and dynam-
+ically orchestrated computing resources (Dragoni
+et al., 2017; Yu, 2025; Bao et al., 2026). While this
+architectural paradigm significantly enhances scala-
+bility and deployment agility, it also introduces un-
+precedented complexity and volatility into system
+behaviors (Gannon et al., 2017). This shift not only
+surpasses the cognitive limits of human operators
+but also fundamentally challenges the design prin-
+ciples of automated operation systems, which must
+now reason about highly dynamic, interdependent,
+and large-scale system states (Joy et al., 2024). As
+organizations scale their digital services, the vol-
+ume of logs, monitoring metrics, and alerts grows
+exponentially, quickly surpassing the cognitive and
+operational limits of human operators (Beyer et al.,
+2016). This challenge is well illustrated by large-
+scale production environments, where even a single
+misconfiguration or latent performance anomaly
+can propagate unpredictably across microservices,
+complicating diagnosis and dramatically increasing
+mean time to recovery (MTTR) (Taibi et al., 2019).
+Empirical studies show that log data in modern
+distributed systems can reach terabyte-level daily
+volumes, making timely incident detection and re-
+mediation infeasible without automation (Xu et al.,
+2009). Consequently, the demand for intelligent,
+autonomous IT operations systems has become crit-
+ical for sustaining reliability, reducing downtime,
+and managing operational risk in next-generation
+cloud-native ecosystems (Dang et al., 2019).
+Existing research on automated IT operations
+generally falls into three major paradigms: rule-
+based expert systems, machine learning-based
+anomaly detection frameworks, and multi-agent
+automation architectures. Early expert systems
+(Xu et al., 2020; Mu´slewski et al., 2022; Sarazin
+et al., 2021; Yu et al., 2025c,b) offered interpretable
+and deterministic decision rules but required ex-
+tensive manual knowledge engineering and were
+often brittle in the face of evolving infrastructure
+topologies. Machine learning–based approaches
+1
+arXiv:2512.13956v2  [cs.MA]  10 Feb 2026
+
+Why AOI
+Operational Reality
+Limitations of 
+Legacy AIOps
+AOI Multi-Agent Breakthrough
+Logs 
+Metrics
+Distributed 
+Microservices
+ALERT STORM
+Overwhelmed 
+Operations Team
+Rule-based 
+Automation
+Static scripts
+Isolated ML 
+Pipelines
+Narrow models
+Single LLM 
+Agent
+Context overflow
+Higher 
+reliability
+Faster recovery
+Safe exploration & 
+information gathering 
+Probe Agent
+Central scheduling 
+& coordination
+Observer Agent
+System remediation 
+& modification
+Executor Agent
+Context Compressor 
+(LLM-based)
+Context Layer
+ready 
+only
+write
+System Outcomes
+
+Higher TSR   
+
+Lower MTTR  
+
+Safer automation
+Architectural Capabilities
+
+Adaptive scheduling  
+
+Intelligent compression  
+
+Formal safety
+Figure 1: Motivation and architecture of the AOI framework, showing how multi-agent collaboration with LLM-
+based context compression overcomes legacy AIOps limitations to enable safer, faster autonomous operations.
+have achieved considerable success in anomaly de-
+tection and log pattern analysis; however, they
+typically lack contextual reasoning capabilities
+needed for accurate root cause localization and
+autonomous remediation (Du et al., 2017; Abid
+et al., 2021; Sangaiah et al., 2022; He et al., 2021).
+More recently, multi-agent systems (MAS) have
+been explored as a promising direction to enable
+distributed coordination, local reasoning, and de-
+centralized decision-making in large-scale IT envi-
+ronments (Wooldridge, 2009; Seitz et al., 2021; Yin
+et al., 2025; Wang et al., 2025; Zhang et al., 2024,
+2025b; Xu et al., 2024; D’Aniello et al., 2021).
+Nevertheless, current MAS-based designs often suf-
+fer from several limitations, including inefficient in-
+formation sharing, limited long-term memory, and
+poor adaptability to dynamic runtime conditions,
+particularly in highly elastic and heterogeneous
+cloud operations (D’Aniello et al., 2021; Pulikottil
+et al., 2021; Li et al., 2024b). These limitations
+highlight the need for a new generation of intel-
+ligent, adaptive, and context-aware autonomous
+operation systems capable of perceiving complex
+system states, reasoning about causal structures,
+and coordinating actions across distributed environ-
+ments (Kephart and Chess, 2003; Lake et al., 2017;
+Pearl et al., 2016; Yao et al., 2021; Ni et al., 2025a).
+Despite progress, existing solutions face key lim-
+itations: (1) Information Overload: Rapid growth
+of operational data overwhelms analysis pipelines,
+degrading decision accuracy and response latency
+(He et al., 2021; Ryciak et al., 2022); (2) Poor Task
+Coordination: Lack of intelligent task decompo-
+sition and scheduling leads to inefficient resource
+utilization (Seitz et al., 2021; Xu et al., 2024); (3)
+Context Loss: Traditional approaches fail to pre-
+serve crucial context in long-running operations,
+impairing diagnosis continuity and repair consis-
+tency (Liu et al., 2024; Hu et al., 2025); (4) Limited
+Adaptability: Most models cannot evolve with
+system drift or new failure modes, limiting general-
+ization to unseen conditions (Wellsandt et al., 2022;
+Chen et al., 2022; Ni et al., 2025b).
+To address these challenges, we present AOI (AI-
+Oriented Operations), a novel multi-agent frame-
+work for intelligent self-adaptive IT operations
+management (Figure 1). AOI integrates special-
+ized agents with LLM reasoning and hierarchical
+memory to enable scalable situational awareness
+and automated decision-making. Table 1 compares
+AOI with existing approaches and highlights its
+distinctive features. Our main contributions are:
+• Multi-Agent Collaborative Architecture: We
+propose a three-agent framework—Observer (co-
+ordination), Probe (safe information gathering),
+and Executor (system modification)—to ensure
+safe and efficient operations.
+• Intelligent Context Compression: We intro-
+duce an LLM-based context compressor with
+sliding windows that preserves critical informa-
+tion while reducing context size by over 70
+• Dynamic Task Scheduling: We develop adap-
+tive scheduling that balances probing and exe-
+cution based on real-time states and historical
+patterns to optimize MTTR and repair success.
+• Three-Layer Memory Architecture: We de-
+sign a hierarchical memory with raw context,
+2
+
+AOI Multi-Agent Algorithm
+Automated remediation with minimal
+human intervention
+Executor Agent         
+Checkpointing
+Plan execution
+Validation / Rollback
+LLM Context Compressor
+Sliding windows
+(50% overlap)
+Critical summary
+generation
+Observe Agent            
+Hierarchical Task
+Decomposition
+Dynamic Scheduler
+System state X(t)                 
+Probe Agent              
+Whitelist validator
+Read-only exec
+Raw context logging
+Safety constraints
+Compressed Context Cache
+Task Queue Memory
+Raw Context Store
+User task τ        
+Rollback if failure
+Prioritized
+Subtask
+Queue
+Figure 2: AOI Multi-Agent Collaborative Framework Architecture. The framework consists of three specialized
+agents (Observer, Probe, Executor) coordinated through a central Context Compressor, with a three-layer memory
+architecture for efficient information management.
+task queues, and compressed context layers for
+efficient retrieval and cross-task reuse.
+2
+Related Work
+Research related to automated IT operations
+spans traditional expert systems, machine learn-
+ing–driven AIOps techniques, multi-agent architec-
+tures for distributed decision-making, and emerg-
+ing advances in large language model (LLM) con-
+text management (Joy et al., 2024; OpenAI, 2023).
+This section reviews the evolution of these areas
+and highlights their limitations in addressing the
+challenges of modern cloud-native operational en-
+vironments (Soldani et al., 2018).
+2.1
+Traditional Automated IT Operations
+Early efforts toward automating IT operations pri-
+marily relied on rule-based expert systems and de-
+terministic diagnostic engines. Classical expert
+systems such as belief rule-based reasoning frame-
+works demonstrated effectiveness in structured in-
+dustrial environments (Xu et al., 2020). Similarly,
+knowledge-graph–driven expert systems have been
+applied to condition-based maintenance and opera-
+tional optimization in industrial systems (Sarazin
+et al., 2021; Mu´slewski et al., 2022). These sys-
+tems offered transparent and interpretable decision-
+making but required extensive manual rule engi-
+neering and were limited in their ability to adapt to
+evolving infrastructures.
+Beyond rule-based expert systems, a line of re-
+search has investigated formal reliability and di-
+agnosability properties of complex networked sys-
+tems, providing theoretical foundations for fault
+detection and isolation. Prior studies have ana-
+lyzed conditional diagnosability, connectivity, and
+fault tolerance of various interconnection networks
+under rigorous diagnostic models, demonstrating
+how structural properties directly impact system
+robustness and recovery guarantees. Such works of-
+fer valuable insights into how system topology and
+fault models influence safe operation and diagnosis,
+which motivates the safety-aware and reliability-
+driven design principles adopted in autonomous IT
+3
+
+Table 1: Comprehensive Comparison of Related Work in Automated IT Operations
+Approach
+Multi-Agent
+Context
+Dynamic
+LLM
+Safety
+Memory
+Theoretical
+Coordination
+Compression
+Scheduling
+Integration
+Guarantees
+Hierarchy
+Foundation
+Expert Systems (Xu et al., 2020; Sarazin et al., 2021)
+✗
+✗
+✗
+✗
+✓
+✗
+✗
+DeepLog (Du et al., 2017)
+✗
+✗
+✗
+✗
+✗
+✗
+Limited
+LogAnomaly (Meng et al., 2019)
+✗
+✗
+✗
+✗
+✗
+✗
+Limited
+Traditional AIOps (Dang et al., 2019)
+✗
+Limited
+✗
+✗
+Limited
+✗
+✗
+MAS Automation (Seitz et al., 2021)
+✓
+✗
+Limited
+✗
+Limited
+✗
+✗
+Cloud-MAS (D’Aniello et al., 2021)
+✓
+Limited
+Limited
+✗
+Limited
+✗
+✗
+LLMLingua (Jiang et al., 2023)
+✗
+✓
+✗
+✓
+✗
+✗
+Limited
+HiAgent (Hu et al., 2025)
+Limited
+✓
+✗
+✓
+✗
+✓
+✗
+AOI (Ours)
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+operations frameworks (Wang et al., 2017b; Wang
+and Wang, 2021; Wang et al., 2024, 2017a).
+With the rise of DevOps practices, automation
+workflows increasingly incorporated Infrastructure
+as Code (IaC) and configuration management tools.
+Systematic analyses of IaC research have docu-
+mented significant progress in automated provi-
+sioning, configuration reproducibility, and system
+deployment (Rahman et al., 2019). Complementary
+surveys on DevOps practices highlight improve-
+ments in continuous delivery pipelines and opera-
+tional efficiency through automated orchestration
+(Leite et al., 2019). However, despite these ad-
+vances, IaC-based automation still lacks the intelli-
+gence required for autonomous fault diagnosis, con-
+textual decision-making, and dynamic adaptation
+in large-scale distributed systems. Recent work on
+AI co-pilots for infrastructure management under-
+scores this gap, advocating for more proactive and
+reasoning-capable assistants (Yang et al., 2025).
+2.2
+Machine Learning in AIOps
+Machine learning–based approaches, collectively
+known as AIOps, have emerged to overcome the
+limitations of static rule-based systems. A num-
+ber of surveys provide comprehensive analyses of
+AIOps methods and real-world operational chal-
+lenges (Dang et al., 2019; Yeruva and Ramu, 2023;
+Diaz-De-Arcaya et al., 2023; Zhang et al., 2025a).
+Among these techniques, log-based anomaly de-
+tection has been a major focus. Deep learning
+models such as LogAnomaly (Meng et al., 2019)
+and earlier sequence-learning approaches such as
+DeepLog (Du et al., 2017) have achieved impres-
+sive results in detecting operational anomalies from
+large-scale unstructured logs. These methods typi-
+cally learn normal system behavior from historical
+data and flag statistically or semantically unusual
+patterns as potential incidents, offering a scalable
+alternative to manual log inspection.
+Other branches of AIOps research focus on pre-
+dictive analytics and resource management. Time-
+series forecasting models, such as recurrent neural
+networks applied to cloud workload prediction (Zi,
+2024), have been used to support proactive scal-
+ing and performance optimization. Unsupervised
+and explainable fault diagnosis methods further en-
+hance interpretability in dynamic systems (Chen
+et al., 2022). Despite these advances, existing ma-
+chine learning approaches typically operate in iso-
+lation—handling logs, metrics, or traces separately.
+They lack a holistic, context-aware understanding
+of system states, and most models fail to integrate
+reasoning, memory, and action planning capabili-
+ties necessary for truly autonomous IT operations
+(Abid et al., 2021; He et al., 2021). As a result, they
+often generate high false-positive rates or require
+significant human intervention to validate and act
+on alerts, limiting their effectiveness in fast-paced,
+large-scale environments (Hsieh et al., 2024).
+2.3
+Multi-Agent Systems for Automated IT
+Operations
+Multi-agent systems (MAS) provide another
+promising paradigm for distributed automation.
+Foundational MAS literature highlights their ad-
+vantages in decentralization, autonomy, and collab-
+orative problem-solving (Wooldridge, 2009). In
+operational environments, MAS architectures have
+been applied to distributed monitoring and anomaly
+detection, allowing agents to independently ob-
+serve and report on system states across hetero-
+geneous infrastructures (Khosravifar, 2018). Other
+works explore collaborative fault diagnosis using
+agent coordination strategies, enabling distributed
+decision-making and improved fault localization
+(Shao et al., 2021; Xu et al., 2023).
+More recent research extends MAS to cloud-
+native and manufacturing environments. D’Aniello
+et al. demonstrate distributed operational man-
+agement using cooperative agents in cloud-
+manufacturing scenarios (D’Aniello et al., 2021),
+while adaptive resource management studies show
+how MAS can respond to dynamic workloads
+(Seitz et al., 2021). Xu et al. further illustrate
+MAS applications in autonomous supply chains,
+4
+
+emphasizing task decomposition and coordination
+under uncertainty (Xu et al., 2024).
+However,
+existing MAS designs often suffer from limited
+global context awareness, inefficient knowledge
+sharing, and difficulties maintaining long-term
+memory—constraints that hinder their ability to
+manage large-scale, highly dynamic IT infrastruc-
+tures (Pulikottil et al., 2021; Li et al., 2024b).
+More broadly, complex real-world systems
+across different domains are often modeled as large-
+scale graphs, where robustness, efficiency, and
+structural properties play a central role in system
+behavior. Recent studies on multilayer transporta-
+tion networks, geophysical systems, and graph-
+based learning further highlight the importance of
+structure-aware modeling and robustness analysis
+in complex environments, reinforcing the relevance
+of graph-structured abstractions in intelligent op-
+erational decision-making (Li et al., 2022; Jiang
+et al., 2024; Pan et al., 2024).
+2.4
+Context Management and Compression in
+Large Language Models
+Recent advances in large language models have
+introduced new opportunities for intelligent opera-
+tions automation, but also new challenges related to
+long-context management (Li et al., 2024a). Long-
+document Transformer architectures such as Long-
+former (Beltagy et al., 2020), Reformer (Kitaev
+et al., 2020), and BigBird (Zaheer et al., 2020) pro-
+vide scalable attention mechanisms to extend con-
+text windows (Song et al., 2025). However, they
+still face limitations when applied to continuously
+evolving, high-volume operational data streams.
+To address context overload, several context
+compression and sparsification techniques have
+been proposed. LLMLingua (Jiang et al., 2023)
+compresses prompts to accelerate inference while
+preserving essential semantics, whereas contextual
+sparsity approaches such as DejaVu prune redun-
+dant information during inference (Liu et al., 2023).
+Complementary memory-augmented models, such
+as the Recurrent Memory Transformer (RMT) (Bu-
+latov et al., 2022), introduce persistent external
+memory to support long-range reasoning. Recent
+studies further reveal that LLMs exhibit position-
+dependent performance degradation in long con-
+texts ("lost in the middle") (Liu et al., 2024; Ni
+et al., 2024), and struggle with in-context explo-
+ration without explicit guidance (Krishnamurthy
+et al., 2024; Peng et al., 2024; Ni et al., 2025c).
+While these methods improve efficiency and
+scalability, they are not designed specifically for
+IT operations environments, where context im-
+portance varies significantly across logs, metrics,
+events, and incidents (Beyer et al., 2016). Existing
+LLM context mechanisms lack adaptive prioriti-
+zation and domain-specific reasoning capabilities
+needed for complex operational decision-making
+(Lewis et al., 2020; Borji, 2023; Liu et al., 2025).
+Emerging hierarchical memory architectures like
+HiAgent (Hu et al., 2025) and retrieval-augmented
+in-context learning (Chen et al., 2024; Yu et al.,
+2025a) offer promising directions, yet remain un-
+explored in AIOps settings (Syed and Anazagasty,
+2024; Diaz-De-Arcaya et al., 2023).
+3
+Theoretical Foundations
+We establish the theoretical foundations of the
+AOI framework through formal analysis of multi-
+agent coordination, dynamic scheduling conver-
+gence, and context compression stability.
+3.1
+Markov Decision Process Formalization
+We model the AOI multi-agent coordination as a
+Decentralized Partially Observable Markov Deci-
+sion Process (Dec-POMDP), defined by the tuple
+M = ⟨N, S, {Ai}, T , R, {Ωi}, O, γ⟩, where:
+• N = {Observer, Probe, Executor} is the
+set of agents
+• S is the joint state space of the IT infrastruc-
+ture
+• Ai is the action space for agent i
+• T : S × A × S →[0, 1] is the state transition
+function
+• R : S ×A →R is the shared reward function
+• Ωi is the observation space for agent i
+• O : S × A × Ω→[0, 1] is the observation
+function
+• γ ∈[0, 1) is the discount factor
+The optimal joint policy π∗= {π∗
+i }i∈N maxi-
+mizes the expected cumulative discounted reward:
+π∗= arg max
+π
+E
+" ∞
+X
+t=0
+γtR(st, at) | π
+#
+(1)
+5
+
+3.2
+Dynamic Scheduling Convergence
+Analysis
+We prove the convergence of our dynamic schedul-
+ing strategy using potential function analysis. De-
+fine the scheduling state at time t as σt
+=
+(qt, ct, ht), where qt is the task queue state, ct is the
+compressed context, and ht is the historical pattern
+embedding.
+Theorem 1 (Scheduling Convergence). Under the
+AOI dynamic scheduling strategy with exploration-
+exploitation parameter λ ∈(0, 1), the expected
+task completion time converges to within a factor
+of (1 + ϵ) of the optimal static scheduling policy
+for any ϵ > 0, with probability at least 1 −δ,
+provided the number of scheduling iterations T ≥
+|A| log(|A|/δ)
+ϵ2λ2
+.
+Proof. Define the potential function Φ(σt)
+=
+P
+τ∈qt w(τ) · d(τ, t), where w(τ) is the priority
+weight and d(τ, t) is the delay cost. Under our
+scheduling policy:
+E[Φ(σt+1)−Φ(σt) | σt] ≤−η·∥∇σΦ(σt)∥2+λ2L2
+2
+(2)
+where η > 0 is the learning rate and L is the Lips-
+chitz constant of the reward function. By applying
+the Robbins-Monro stochastic approximation theo-
+rem, the scheduling policy converges to a stationary
+point. Combined with the UCB-style exploration
+bonus, regret analysis yields the stated bound.
+3.3
+Context Compression Stability
+We analyze the stability of the LLM-based context
+compression through Lyapunov analysis. Let C(t)
+denote the context state at time t, with compression
+operator F : C →Ccompressed.
+Theorem 2 (Compression Stability). The context
+compression mechanism with sliding window size
+w and overlap ratio ρ ∈(0.5, 1) satisfies Lyapunov
+stability, i.e., there exists a Lyapunov function V :
+C →R≥0 such that:
+V (F(C)) −V (C) ≤−κ · ∥C −C∗∥2
+(3)
+for some κ > 0 and equilibrium state C∗, ensuring
+bounded information loss.
+Proof. Define V (C) = 1
+2∥C −C∗∥2
+H, where ∥· ∥H
+is the norm in the reproducing kernel Hilbert space
+induced by the LLM embedding. The compression
+operator satisfies:
+∥F(C)−C∗∥H ≤(1−ρ)∥C −C∗∥H +ϵLLM (4)
+where ϵLLM is the LLM approximation error
+bounded by model capacity. For ρ > 0.5, con-
+traction holds and stability follows.
+3.4
+Information Preservation Bound
+We establish theoretical guarantees on information
+preservation during compression.
+Theorem
+3
+(Information
+Preservation).
+Let
+I(C; Y) denote the mutual information between
+context C and operational outcome Y. The com-
+pressed context Ccomp = F(C) satisfies:
+I(Ccomp; Y) ≥(1 −ϵinfo) · I(C; Y)
+(5)
+where ϵinfo = O
+
+1
+w·ρ
+
+depends on window size
+w and overlap ratio ρ.
+This bound theoretically justifies our empirical
+observation that larger window sizes improve infor-
+mation preservation (Table 4).
+4
+Methodology
+4.1
+Problem statement and framework
+overview
+Previous researches on automated IT operations
+have predominantly focused on rule-based execu-
+tion, isolated anomaly detection, or single-agent
+decision-making, which fail to address the core
+challenges posed by modern cloud-native infras-
+tructures—exponential growth of operational data,
+distributed task coordination complexity, and loss
+of contextual continuity in dynamic environments.
+These limitations lead to inefficient information
+processing, delayed fault remediation, and inade-
+quate adaptability to evolving system states, hin-
+dering the realization of truly autonomous IT op-
+erations. Therefore, this paper aims to develop a
+scalable, context-aware multi-agent collaborative
+framework (AOI) that enables intelligent IT opera-
+tions with minimal human intervention. However,
+we encounter four major challenges in practice:
+• For information overload: how to efficiently com-
+press massive operational context while preserv-
+ing critical information related to fault diagnosis
+and remediation.
+• For task coordination: how to dynamically sched-
+ule distributed probing and execution tasks to bal-
+ance information gain and remediation efficiency
+based on real-time system states.
+6
+
+• For context retention: how to design a memory
+architecture that supports efficient storage, re-
+trieval, and reuse of operational context across
+multi-incident and long-running operations.
+• For operational safety: how to ensure that au-
+tomated system modifications avoid destructive
+actions and enable rapid rollback in case of exe-
+cution failures.
+To tackle these challenges, we designed an inno-
+vative multi-agent framework integrated with large
+language model (LLM) reasoning and hierarchical
+memory management. Our solution consists of the
+following components: Multi-agent collaborative
+architecture- This module comprises three special-
+ized agents—Observer for task decomposition and
+coordination, Probe for safe read-only information
+gathering, and Executor for risk-controlled system
+modification—ensuring clear responsibility sepa-
+ration and operational safety. LLM-based con-
+text compressor- This module employs a sliding-
+window mechanism and domain-aware summariza-
+tion to intelligently compress operational context,
+achieving high compression ratios while retain-
+ing critical diagnostic and remediation informa-
+tion. Dynamic task scheduling strategy- This
+module adaptively prioritizes probing and execu-
+tion tasks based on real-time system states, bal-
+ancing exploration (information collection) and
+exploitation (fault remediation) to optimize mean
+time to resolution (MTTR) and task success rate.
+Three-layer memory architecture- This module
+comprises Raw Context Storage for unprocessed
+data, Task Queue Management for structured exe-
+cution, and a Compressed Context Cache for LLM-
+processed strategic information, enabling efficient
+multi-scale context management.
+4.2
+Problem Formulation
+Let S = {s1, s2, ..., sn} represent the set of sys-
+tem components under management, where each
+component si has a state vector xi(t) ∈Rd at
+time t. Given a user task τ and current system
+state X(t) = [x1(t), x2(t), ..., xn(t)]T , our ob-
+jective is to find an optimal sequence of actions
+A = {a1, a2, ..., ak} that transforms the system
+to a desired target state X∗while minimizing the
+operational cost function:J (A) = α·Tcompletion +
+β · Cresource + γ · Rrisk, where Tcompletion is the
+Mean Time to Resolution (MTTR), Cresource repre-
+sents computational and network overhead, Rrisk
+quantifies the operational risk score of potential
+system instability or SLA violations, and α, β, γ
+are weighting parameters.
+4.3
+AOI Framework Architecture
+Figure 1 shows the AOI architecture, comprising 4
+core components and a 3-layer memory system.
+4.3.1
+Observer Agent
+The Observer Agent serves as the central coordi-
+nation unit responsible for task analysis, decom-
+position, and strategic decision-making. Its core
+functionalities include: Task Decomposition Algo-
+rithm: Given a complex task τ, the Observer em-
+ploys a hierarchical decomposition strategy shown
+in Algorithm 1.
+Algorithm 1 Dynamic Task Decomposition
+Require: Task τ, System State X(t), Context
+Ccompressed
+Ensure: Subtask Queue Qsubtasks
+1: Initialize Qsubtasks ←∅
+2: Analyze task complexity C(τ)
+3: if C(τ) > θcomplex then
+4:
+Decompose
+τ
+into
+atomic
+subtasks
+{τ1, τ2, ..., τm}
+5:
+for each τi in decomposed tasks do
+6:
+Determine task type:
+type(τi)
+∈
+{probe, execute}
+7:
+Estimate resource requirements R(τi)
+8:
+Assign priority P(τi) based on depen-
+dency analysis
+9:
+Enqueue (τi, type(τi), R(τi), P(τi)) to
+Qsubtasks
+10:
+end for
+11: else
+12:
+Enqueue τ directly to Qsubtasks
+13: end if
+14: return Qsubtasks
+Dynamic Scheduling Strategy: The Observer
+implements an adaptive scheduling algorithm that
+balances exploration (probing) and exploitation (ex-
+ecution) based on current information sufficiency:
+S(t) = arg maxa∈{probe,execute} E[Reward(a, X(t), C(t))]
+(6)
+where S means Schedule, the expected reward func-
+tion considers information gain for probing actions
+and progress toward goal state for execution ac-
+tions. Specifically, the reward for a probe action is
+quantified by the expected reduction in system state
+uncertainty (information gain), while the reward
+7
+
+for an execute action is based on the estimated
+progress towards the target system state X∗.
+4.3.2
+Probe Agent
+The Probe Agent is a strictly read-only component
+for safe system information gathering. Safety-by-
+Design: It follows the least-privilege principle to
+prevent unintended modifications during diagnos-
+tics. Safety Constraints: The agent is limited
+to non-destructive query and read operations (e.g.,
+database introspection and log/file reads), while
+any state-changing actions (e.g., writes, deletions,
+schema changes, or destructive commands) are ex-
+plicitly prohibited. File access remains read-only,
+and network interactions are restricted to query-
+type requests.
+Information Collection Strategy: The Probe
+employs a structured probing strategy (Algo-
+rithm 2).
+Algorithm 2 Safe Information Probing
+Require: Probe Task τprobe, Target System S
+Ensure: Raw Information Iraw
+1: Initialize Iraw ←∅
+2: Generate
+probe
+script
+script
+←
+GenerateScript(τprobe)
+3: Validate
+script
+safety:
+V alidateSafety(script)
+4: if script is safe then
+5:
+for each command cmd in script do
+6:
+Execute
+result
+←
+ExecuteReadOnly(cmd, S)
+7:
+Append result to Iraw
+8:
+if error occurred then
+9:
+Log error and continue with next com-
+mand
+10:
+end if
+11:
+end for
+12: else
+13:
+Reject unsafe script and request revision
+14: end if
+15: Store Iraw in Memory-Raw Context
+16: return Iraw
+4.3.3
+Executor Agent
+The Executor Agent implements system modifica-
+tions to achieve target operational outcomes. Un-
+like the Probe Agent, it can modify system state
+under coordination with the Observer. Conser-
+vative Execution Strategy: The Executor adopts
+a cautiously optimistic approach. Each execu-
+tion is preceded by a full-system checkpoint, en-
+abling instant rollback upon unexpected or critical
+failures, thereby supporting a fail-fast, recover-
+quickly paradigm (Algorithm 3).
+Algorithm 3 Safe System Execution
+Require: Execution Task τexec, Target System S
+Ensure: Execution Result Rexec
+1: Create
+checkpoint
+checkpoint
+←
+CreateCheckpoint(S)
+2: Generate
+execution
+plan
+plan
+←
+GeneratePlan(τexec)
+{Plan
+generation
+includes
+pre-execution
+validation
+and
+dependency checks}
+3: for each action a in plan do
+4:
+if RequiresSystemInfo(a) then
+5:
+Query Probe Agent for current state
+6:
+Update action parameters based on cur-
+rent state
+7:
+end if
+8:
+Execute result ←ExecuteAction(a, S)
+9:
+Validate execution result
+10:
+if critical failure detected then
+11:
+Initiate rollback to checkpoint
+12:
+BREAK
+13:
+end if
+14: end for
+15: Store execution results in Memory-Raw Con-
+text
+16: return Rexec
+4.3.4
+Context Compressor
+The Context Compressor leverages large language
+models to intelligently process and compress oper-
+ational context while preserving critical informa-
+tion. Semantic-Aware Compression: Unlike tra-
+ditional keyword-based or statistical compression
+methods, our LLM-based compressor leverages the
+model’s semantic understanding capabilities to
+identify and preserve operationally critical infor-
+mation (e.g., error patterns, resource thresholds,
+causal relationships) while discarding redundant or
+low-signal data. Sliding Window Compression:
+We implement a sliding window mechanism with
+50% overlap to ensure context continuity and pre-
+vent the loss of critical information that might
+span the boundary between two consecutive win-
+dows: Windowi = [starti, starti + windowsize]
+where starti = i × (windowsize × overlapratio)
+and overlapratio = 0.5. Intelligent Compression
+Strategy: The compression algorithm prioritizes
+8
+
+information based on criticality:
+Algorithm 4 LLM-based Context Compression
+Require: Raw Context Craw, Compression Target
+Ratio rtarget
+Ensure: Compressed Context Ccompressed
+1: Split
+Craw
+into
+sliding
+windows
+{W1, W2, ..., Wk}
+2: Initialize Ccompressed ←∅
+3: for each window Wi do
+4:
+Identify critical information: Icritical ←
+ExtractCritical(Wi) {Using LLM to ex-
+tract fault signatures, error codes, and per-
+formance anomalies}
+5:
+Generate
+summary:
+Si
+←
+LLMSummarize(Wi, Icritical)
+6:
+Append Si to Ccompressed
+7: end for
+8: Merge overlapping summaries: Cmerged ←
+MergeOverlaps(Ccompressed)
+9: Apply secondary compression if needed to
+meet rtarget
+10: return Cmerged
+4.4
+Three-Layer Memory Architecture
+Our memory management system consists of three
+specialized layers designed following the principle
+of data lifecycle management, where information
+flows from high-volume, short-term raw storage to
+condensed, long-term strategic memory, optimiz-
+ing both retrieval speed and storage efficiency.
+Layer 1: Raw Context Storage — Stores un-
+processed results from Probe and Executor agents
+with 24-hour retention. (Feeds into Context Com-
+pressor). Layer 2: Task Queue Management
+—
+Maintains structured execution instructions
+with lifecycle management. (Managed by Ob-
+server and executed by Executor).
+Layer 3:
+Compressed Context Cache — Houses LLM-
+processed information with 7-day retention for
+strategic decision-making. (Populated by Con-
+text Compressor and queried by Observer).
+4.5
+Complexity Analysis
+The computational complexity of the AOI frame-
+work is primarily determined by the LLM-based
+context compression module, which exhibits a time
+complexity of O(n · w), where n denotes the con-
+text length and w represents the compression win-
+dow size. The space complexity is O(k ·w), with k
+corresponding to the number of overlapping sliding
+windows. Benefiting from the distributed multi-
+agent design, the framework achieves near-linear
+scalability with respect to the number of concurrent
+tasks, as each agent operates independently with
+minimal inter-agent communication overhead.
+5
+Experiments
+5.1
+Experimental Setup
+All experiments were conducted in a controlled
+cloud-based environment designed to emulate real-
+istic large-scale IT operations, with the infrastruc-
+ture carefully configured to ensure reproducibility
+and enable controlled fault injection for stress test-
+ing. The experimental cluster consisted of eight
+AWS EC2 c5.4xlarge instances, each equipped
+with 16 vCPUs and 32 GB of RAM, supported
+by high-IOPS persistent storage. All nodes were
+interconnected through a 10 Gbps network with
+adjustable latency injection to simulate diverse
+communication conditions. The software stack
+was built on Ubuntu 20.04 LTS, running Docker
+and Kubernetes for container orchestration. Sys-
+tem monitoring and telemetry were implemented
+via an integrated observability framework com-
+posed of Prometheus, Grafana, and the ELK
+stack (Prometheus Authors, 2024; Grafana Labs,
+2024; Elastic, 2024). The large language model
+(LLM) backend employed a fine-tuned GPT-4 API
+optimized for operations-related context under-
+standing and summarization, enabling accurate in-
+terpretation and efficient processing of system logs
+and alerts (OpenAI, 2023).
+5.2
+Datasets and Scenarios
+We evaluate AOI on two complementary datasets
+spanning synthetic and real-world environments.
+The AIOpsLab Simulation Environment con-
+tains 1,000 fault-injection scenarios covering 50
+fault types, ranging from isolated failures to cascad-
+ing faults, each annotated with ground-truth resolu-
+tions and post-recovery states (Chen et al., 2025).
+To assess practical applicability, we additionally
+use the Loghub Benchmark, which aggregates
+real-world production logs from distributed storage
+systems, microservices, and enterprise infrastruc-
+tures (Zhu et al., 2023). Logs are preprocessed via
+anonymization, parsing, and scenario segmentation
+to align with AOI’s task structure. Across both
+datasets, evaluation focuses on four representative
+operational event categories: service failure recov-
+ery, performance degradation, configuration drift,
+9
+
+and security incidents.
+5.3
+Baseline Methods
+To comprehensively evaluate the effectiveness of
+the proposed AOI framework, we compared it
+against four representative and reproducible base-
+line approaches that capture the major paradigms
+in automated IT operations. The Rule-based Ex-
+pert System (RES) (Xu et al., 2020; Sarazin et al.,
+2021) represents traditional automation techniques
+relying on deterministic rules implemented through
+Ansible playbooks and custom operational scripts.
+The Traditional AIOps Pipeline (TAP) (Dang et al.,
+2019) follows a classical machine learning architec-
+ture that integrates anomaly detection modules with
+predefined scripted responses for fault remediation.
+The Single-Agent LLM (SA-LLM) baseline (Jiang
+et al., 2023) applies a large language model directly
+to operational decision-making tasks without incor-
+porating multi-agent collaboration or contextual
+memory mechanisms. Finally, the Baseline Multi-
+Agent System (B-MAS) (D’Aniello et al., 2021)
+extends conventional automation through agent-
+based coordination but omits the intelligent context
+compression and adaptive scheduling strategies in-
+troduced in our AOI framework.
+5.4
+Evaluation Metrics
+We evaluate system performance through a com-
+prehensive set of metrics: Primary metrics include
+the Task Success Rate (TSR), which measures the
+percentage of successfully completed tasks; the
+Mean Time to Resolution (MTTR), referring to the
+average duration from task initiation to comple-
+tion; the Context Compression Ratio (CCR), repre-
+senting the ratio of compressed to original context
+size; and the Information Preservation Score (IPS),
+assessing the retention of critical information af-
+ter compression. Secondary metrics comprise the
+False Positive Rate (FPR), indicating the percent-
+age of incorrect actions taken; Resource Utilization
+Efficiency (RUE), which reflects computational re-
+sources consumed per task; the Scalability Index
+(SI), measuring performance degradation as the
+number of concurrent tasks increases; and the Sys-
+tem Safety Score (SSS), evaluating the system’s
+capability to avoid potentially harmful actions.
+5.5
+Implementation Details
+The system is designed for reproducibility and ro-
+bustness. Each agent is implemented as a container-
+ized microservice in Python 3.9 using FastAPI for
+inter-agent communication (FastAPI Contributors,
+2024). Context compression integrates the Ope-
+nAI GPT-4 API with custom prompts optimized
+for operational contexts, incurring an average la-
+tency of 2.3 seconds per compression (OpenAI,
+2023). Memory management relies on a Redis
+Cluster for distributed storage, failover, and per-
+sistence. Operational safety is ensured via formal
+TLA+ specifications and runtime monitoring with
+custom safety rules (Lamport, Leslie, 2023).
+6
+Results
+6.1
+Main Experimental Results
+As shown in Table 2, AOI outperforms all baselines
+across metrics. It achieves the highest task suc-
+cess rate (94.2%), improving by 34.9% and 9.0%
+over rule-based and best multi-agent baselines, re-
+spectively. AOI reduces MTTR to 22.1 minutes, a
+34.4% reduction from the best baseline (33.7 min-
+utes). It also attains a 72.4% context compression
+ratio with 92.8% information preservation, vali-
+dating the LLM-based compression. Finally, AOI
+achieves the lowest false positive rate (3.1%) and
+the highest safety score (96.7%).
+We evaluate cross-dataset generalization on four
+heterogeneous benchmarks—HDFS, BGL, Open-
+Stack, and AIOpsLab—covering both real-world
+and simulated operational environments. As shown
+in Figure 3, AOI consistently outperforms all base-
+lines across datasets, indicating robust transferabil-
+ity beyond the training distribution. Quantitative
+results in Table 7 further confirm this trend: AOI
+achieves the highest Task Success Rate (TSR) on
+all datasets (92.1–94.2%) while simultaneously
+reducing Mean Time To Resolution (MTTR) to
+around 22 minutes, substantially outperforming the
+strongest baseline (B-MAS). Notably, the perfor-
+mance gains are stable across diverse log character-
+istics and system settings, demonstrating that AOI
+generalizes well across operational domains rather
+than overfitting to a specific dataset.
+6.2
+Ablation Studies
+Our ablation studies (Table 3) systematically val-
+idate the necessity of each component in the AOI
+framework. The absence of the context compressor
+results in a 5.7% TSR drop and a 7.7-minute MTTR
+increase, directly attributing its value to filtering
+noise. The absence of dynamic scheduling causes a
+20.8% MTTR increase, linking its function to real-
+time prioritization. Replacing the three-layer mem-
+10
+
+Table 2: Main Experimental Results Comparison
+Method
+TSR (%)
+MTTR (min)
+CCR (%)
+IPS (%)
+FPR (%)
+RUE
+SI
+SSS (%)
+Rule-based Expert System (RES)
+67.8
+54.3
+–
+–
+9.2
+0.71
+0.62
+78.5
+Traditional AIOps Pipeline (TAP)
+75.1
+42.6
+35.7
+81.4
+7.8
+0.76
+0.74
+82.3
+Single-Agent LLM (SA-LLM)
+81.5
+38.2
+52.9
+86.7
+6.9
+0.79
+0.77
+88.6
+Baseline Multi-Agent System (B-MAS)
+86.4
+33.7
+61.8
+89.3
+5.6
+0.82
+0.81
+90.1
+Our AOI Framework
+94.2
+22.1
+72.4
+92.8
+3.1
+0.89
+0.93
+96.7
+HDFS
+BGL
+OpenStack
+AIOpsLab
+Dataset
+55
+60
+65
+70
+75
+80
+85
+90
+95
+100
+Task Success Rate (%)
+(a) Task Success Rate Across Datasets
+RES
+TAP
+SA-LLM
+B-MAS
+AOI
+HDFS
+BGL
+OpenStack
+AIOpsLab
+Dataset
+0
+10
+20
+30
+40
+50
+60
+MTTR (minutes)
+(b) MTTR Across Datasets
+RES
+TAP
+SA-LLM
+B-MAS
+AOI
+Figure 3: Cross-dataset performance comparison across
+HDFS, BGL, OpenStack, and AIOpsLab benchmarks.
+AOI consistently outperforms all baseline methods
+across diverse operational environments, demonstrat-
+ing strong generalization capability.
+ory incurs a 4.8% performance loss, confirming its
+role in context reuse. Ultimately, the single-agent
+baseline’s nearly 10% lower TSR conclusively es-
+tablishes the effectiveness of our multi-agent coor-
+dination and specialization.
+Table 3: Ablation Study Results
+Configuration
+TSR (%)
+MTTR (min)
+CCR (%)
+AOI (Full)
+94.2
+22.1
+72.4
+w/o Context Compressor
+88.5
+29.8
+N/A
+w/o Dynamic Scheduling
+90.1
+26.7
+70.5
+w/o Three-Layer Memory
+89.4
+27.5
+65.2
+Single-Agent Version
+84.6
+31.4
+60.3
+6.3
+Parameter Sensitivity Analysis
+We analyze the sensitivity of AOI to three key
+parameters: context compression window size,
+scheduling balance factor, and memory retention
+policy.
+Compression Window Size. Table 4 and Fig-
+ure 4 show that increasing the compression window
+size consistently improves TSR, CCR, and IPS up
+to a moderate range, after which gains become
+marginal. In particular, a window size of 768 to-
+kens achieves the best overall trade-off, reaching a
+CCR of 72.4% and an IPS of 92.8%, while main-
+taining strong TSR. Larger windows (e.g., 1024
+and 1536 tokens) provide only negligible improve-
+ments at increased computational cost, indicating
+diminishing returns beyond this point.
+Scheduling Strategy Parameters.
+We vary
+the exploration–exploitation balance factor λ ∈
+[0.2, 0.8] and observe that performance peaks at
+λ = 0.35, suggesting that moderate exploration is
+critical for effective decision scheduling.
+Memory Retention Policies. Retaining episodic
+memory for 72 hours improves TSR by 3.5% com-
+pared to 24-hour retention, while extending reten-
+tion to 120 hours yields minimal additional gains
+with higher resource overhead.
+Table 4: Parameter sensitivity for context compression
+window size (results averaged over 5 runs). IPS = Infor-
+mation Preservation Score.
+Window size (tokens)
+TSR (%)
+CCR (%)
+IPS (%)
+256
+89.1 ± 1.3
+58.7
+86.2
+512
+91.4 ± 1.0
+66.0
+90.1
+768
+94.2 ± 0.8
+72.4
+92.8
+1024
+94.5 ± 0.9
+74.0
+92.9
+1536
+94.6 ± 1.0
+74.6
+92.7
+Figure 4: Impact of Key Parameters on Performance
+6.4
+Scalability Study
+We evaluate the scalability of AOI under increasing
+levels of concurrency using the AIOpsLab sim-
+ulation. As shown in Figure 5, AOI maintains
+stable performance as the number of concurrent
+tasks grows, with task success rates remaining
+above 88% up to 50 parallel tasks. Table 5 pro-
+vides quantitative results, showing a gradual and
+controlled increase in MTTR as concurrency rises,
+while resource utilization efficiency (RUE) scales
+near-linearly with task load. These results indi-
+11
+
+cate that AOI avoids performance collapse under
+high concurrency and can support enterprise-scale
+deployments with sustained effectiveness.
+Table 5: Scalability under increasing concurrent tasks
+(AIOpsLab simulation). Values are mean over 5 runs.
+Tasks
+TSR
+MTTR
+RUE
+(%)
+(min)
+(CPU-s/task)
+1
+95.3 ± 0.6
+21.6 ± 0.9
+123
+5
+94.6 ± 0.7
+22.3 ± 1.4
+126
+10
+93.8 ± 0.8
+23.5 ± 1.3
+131
+20
+92.1 ± 1.2
+25.8 ± 1.4
+157
+50
+88.9 ± 1.6
+31.2 ± 2.7
+194
+1
+5
+10
+20
+50
+100
+Concurrent Tasks
+80.0
+82.5
+85.0
+87.5
+90.0
+92.5
+95.0
+97.5
+100.0
+Task Success Rate (%)
+(a) Success Rate Scalability
+1
+5
+10
+20
+50
+100
+Concurrent Tasks
+22.5
+25.0
+27.5
+30.0
+32.5
+35.0
+37.5
+40.0
+MTTR (minutes)
+(b) Resolution Time Scalability
+1
+5
+10
+20
+50
+100
+Concurrent Tasks
+125
+150
+175
+200
+225
+250
+275
+300
+CPU Time per Task (seconds)
+(c) Computational Overhead
+1
+5
+10
+20
+50
+100
+Concurrent Tasks
+200
+400
+600
+800
+1000
+1200
+1400
+Response Latency (ms)
+(d) System Latency
+Figure 5: Scalability analysis of the AOI framework
+under increasing concurrent task loads. The framework
+maintains high task success rates (> 88%) and near-
+linear resource utilization efficiency up to 50 concurrent
+tasks, demonstrating robust scalability for enterprise-
+scale deployments.
+6.5
+Qualitative Analysis and Case Studies
+Case Study 1: Complex Cascading Failure. In a
+simulated e-commerce infrastructure, AOI identi-
+fied a cascading database connection failure within
+4.3 minutes, automatically triggered dependency
+recovery, and fully restored service in 18.5 minutes.
+Competing systems required over 35 minutes and
+often failed to detect intermediate dependencies.
+Case Study 2: Configuration Drift Resolution.
+In a Kubernetes-based microservice deployment,
+AOI detected a policy mismatch between ingress
+and service configurations. The Probe agent safely
+confirmed the issue, and the Executor executed a
+validated rollback plan with zero packet loss, re-
+sulting in overall downtime of less than 3 minutes.
+Failure Case Analysis.
+AOI exhibited limita-
+tions in scenarios involving extremely rapid failure
+propagation (less than 2 seconds), unseen hybrid
+fault types absent from the training corpus, and
+situations where GPT-based compression latency
+caused temporary decision delays under extreme
+load. These cases highlight areas for improvement
+and guide ongoing efforts toward online learning
+and real-time adaptive compression.
+Table 6: Ablation study (5-run mean ± std). Each row
+disables specified component(s).
+Configuration
+TSR
+MTTR
+CCR
+(%)
+(min)
+(%)
+AOI (Full)
+94.2 ± 0.8
+22.1 ± 1.0
+72.4
+w/o Context Compressor
+88.5 ± 1.2
+29.8 ± 1.5
+N/A
+w/o Dynamic Scheduling
+90.1 ± 1.0
+26.7 ± 1.3
+70.5
+w/o Three-Layer Memory
+89.4 ± 1.1
+27.5 ± 1.4
+65.2
+w/o Safety Verifier
+92.0 ± 0.9
+24.3 ± 1.2
+72.1
+w/o Checkpointing
+91.1 ± 1.0
+25.8 ± 1.6
+71.9
+Single-Agent Version
+84.6 ± 1.4
+31.4 ± 1.9
+60.3
+7
+Discussion
+7.1
+Key Insights and Implications
+Our experimental evaluation reveals several impor-
+tant insights about multi-agent collaborative frame-
+works for IT operations:
+Context Management is Critical: The signif-
+icant performance difference between configura-
+tions with and without intelligent context compres-
+sion demonstrates that information overload is a
+major bottleneck in automated operations. Our
+LLM-based compression approach successfully ad-
+dresses this challenge while preserving critical op-
+erational details.
+Agent Specialization Improves Safety: The
+clear separation of responsibilities between read-
+only Probe agents and write-capable Executor
+agents provides inherent safety guarantees that
+monolithic approaches cannot achieve. This de-
+sign principle should be adopted more widely in
+automation frameworks.
+Dynamic Scheduling Outperforms Static Ap-
+proaches: Our adaptive scheduling strategy consis-
+tently outperforms fixed exploration-exploitation
+ratios, suggesting that operational contexts require
+sophisticated decision-making that adapts to cur-
+rent system state and historical patterns.
+7.2
+Advantages and Limitations
+The AOI framework offers several notable advan-
+tages. Its distributed agent architecture ensures
+scalability, allowing performance to grow linearly
+12
+
+Table 7: Cross-dataset summary: Task Success Rate (TSR) and Mean Time To Resolution (MTTR). Results are
+reported as mean ± std over 5 independent runs.
+Dataset
+Method
+TSR (%)
+MTTR (min)
+Dataset
+AOI TSR / MTTR
+HDFS
+RES
+62.4 ± 2.1
+58.7 ± 3.5
+HDFS (AOI)
+92.1 ± 1.1 / 22.9 ± 1.2
+TAP
+71.8 ± 1.9
+44.9 ± 2.8
+B-MAS (best)
+84.7 ± 1.4 / 34.8 ± 1.9
+SA-LLM
+78.9 ± 1.6
+40.6 ± 2.1
+B-MAS
+84.7 ± 1.4
+34.8 ± 1.9
+AOI
+92.1 ± 1.1
+22.9 ± 1.2
+BGL
+RES
+66.1 ± 2.4
+55.0 ± 3.8
+BGL (AOI)
+93.4 ± 0.9 / 21.7 ± 1.0
+TAP
+74.0 ± 2.0
+43.7 ± 3.0
+B-MAS (best)
+85.6 ± 1.3 / 33.2 ± 2.0
+SA-LLM
+80.3 ± 1.7
+39.1 ± 2.4
+B-MAS
+85.6 ± 1.3
+33.2 ± 2.0
+AOI
+93.4 ± 0.9
+21.7 ± 1.0
+OpenStack
+RES
+64.0 ± 2.3
+56.9 ± 3.6
+OpenStack (AOI)
+92.7 ± 1.0 / 22.4 ± 1.3
+TAP
+73.6 ± 2.1
+45.5 ± 2.9
+B-MAS (best)
+86.1 ± 1.2 / 34.1 ± 1.8
+SA-LLM
+79.8 ± 1.8
+39.8 ± 2.5
+B-MAS
+86.1 ± 1.2
+34.1 ± 1.8
+AOI
+92.7 ± 1.0
+22.4 ± 1.3
+AIOpsLab (sim)
+RES
+67.8 ± 2.0
+54.3 ± 3.3
+AIOpsLab (AOI)
+94.2 ± 0.8 / 22.1 ± 1.0
+TAP
+75.1 ± 1.8
+42.6 ± 2.7
+B-MAS (best)
+86.4 ± 1.1 / 33.7 ± 1.7
+SA-LLM
+81.5 ± 1.5
+38.2 ± 2.2
+B-MAS
+86.4 ± 1.1
+33.7 ± 1.7
+AOI
+94.2 ± 0.8
+22.1 ± 1.0
+with system complexity. Built-in safety mecha-
+nisms enhance safety by preventing destructive op-
+erations, while dynamic scheduling provides adapt-
+ability, effectively responding to varying opera-
+tional conditions. Additionally, intelligent context
+compression improves efficiency by reducing in-
+formation overload. Despite these strengths, the
+framework has certain limitations. Its reliance on
+external LLM services introduces latency and po-
+tential service dependencies. Performance is also
+contingent on the quality and coverage of training
+scenarios, and the processes of context compres-
+sion and multi-agent coordination incur additional
+computational overhead. Finally, the system ex-
+hibits limited capability in handling completely un-
+precedented failure scenarios, representing novel
+failure modes that remain challenging.
+7.3
+Practical Deployment Considerations
+Organizations considering adoption of the AOI
+framework should account for several practical fac-
+tors. First, infrastructure requirements include con-
+tainer orchestration capabilities and sufficient com-
+putational resources to support LLM operations,
+which may increase infrastructure costs. Second,
+integration challenges arise as existing monitoring
+and automation tools must interface with the agent
+framework, making API compatibility and data for-
+mat standardization essential. Third, staff training
+is necessary, as operations teams need to under-
+stand multi-agent system concepts and framework-
+specific procedures, requiring careful change man-
+agement. Finally, in regulated industries, regula-
+tory compliance must be ensured, with automated
+decision-making aligned to relevant requirements
+and accompanied by appropriate audit trails.
+8
+Conclusion
+This paper presents AOI, a multi-agent framework
+for intelligent IT operations that addresses key chal-
+lenges in modern infrastructure management. AOI
+integrates a specialized three-agent architecture,
+LLM-based context compression, adaptive task
+scheduling, and hierarchical memory to enable safe,
+efficient, and scalable operations. Extensive exper-
+iments show that AOI significantly improves task
+success, resolution time, and overall operational
+efficiency over existing approaches, while ablation
+and case studies further validate the effectiveness
+of each component in realistic scenarios.
+Limitations
+Despite the mentioned strengths, the framework
+has certain limitations. Its reliance on external
+LLM services introduces latency and potential ser-
+vice dependencies. Performance is also contingent
+on the quality and coverage of training scenarios,
+and the processes of context compression and multi-
+agent coordination incur additional computational
+overhead. Additionally, the system exhibits limited
+13
+
+capability in handling completely unprecedented
+failure scenarios, representing novel failure modes
+that remain challenging.
+References
+Anam Abid, Muhammad Tahir Khan, and Javaid Iqbal.
+2021. A review on fault detection and diagnosis
+techniques: basics and beyond. Artificial Intelligence
+Review, 54(5):3639–3664.
+Riyang Bao, Cheng Yang, Dazhou Yu, Zhexiang Tang,
+Gengchen Mai, and Liang Zhao. 2026. Spatial-agent:
+Agentic geo-spatial reasoning with scientific core
+concepts. arXiv preprint arXiv:2601.16965.
+Iz Beltagy, Matthew E Peters, and Arman Cohan. 2020.
+Longformer: The long-document transformer. arXiv
+preprint arXiv:2004.05150.
+Betsy Beyer,
+Chris Jones,
+Jennifer Petoff,
+and
+Niall Richard Murphy. 2016. Site Reliability En-
+gineering: How Google Runs Production Systems.
+O’Reilly Media, Sebastopol, CA.
+Ali Borji. 2023. A categorical archive of chatgpt fail-
+ures. arXiv preprint arXiv:2302.03494.
+Aydar Bulatov, Yury Kuratov, and Mikhail Burtsev.
+2022. Recurrent memory transformer. Advances
+in Neural Information Processing Systems, 35:11079–
+11091.
+Hongtian Chen, Zhigang Liu, Cesare Alippi, Biao
+Huang, and Derong Liu. 2022. Explainable intel-
+ligent fault diagnosis for nonlinear dynamic systems:
+From unsupervised to supervised learning. IEEE
+Transactions on Neural Networks and Learning Sys-
+tems, 35(5):6166–6179.
+Huiyao Chen, Yu Zhao, Zulong Chen, Mengjia Wang,
+Liangyue Li, Meishan Zhang, and Min Zhang. 2024.
+Retrieval-style in-context learning for few-shot hi-
+erarchical text classification.
+Transactions of the
+Association for Computational Linguistics, 12:1214–
+1231.
+Yinfang Chen, Manish Shetty, Gagan Somashekar,
+Minghua Ma, Yogesh Simmhan, Jonathan Mace,
+Chetan Bansal, Rujia Wang, and Saravan Rajmohan.
+2025. Aiopslab: A holistic framework to evaluate ai
+agents for enabling autonomous clouds. In Proceed-
+ings of Machine Learning and Systems (MLSys).
+Yingnong Dang, Qingwei Lin, and Peng Huang. 2019.
+Aiops: real-world challenges and research innova-
+tions. In 2019 IEEE/ACM 41st International Confer-
+ence on Software Engineering: Companion Proceed-
+ings (ICSE-Companion), pages 4–5. IEEE.
+Josu Diaz-De-Arcaya, Ana I Torre-Bastida, Gorka
+Zárate, Raúl Miñón, and Aitor Almeida. 2023. A
+joint study of the challenges, opportunities, and
+roadmap of mlops and aiops: A systematic survey.
+ACM Computing Surveys, 56(4):1–30.
+Nicola Dragoni, Saverio Giallorenzo, Alberto Lluch
+Lafuente, Manuel Mazzara, Fabrizio Montesi, Ruslan
+Mustafin, and Larisa Safina. 2017. Microservices:
+yesterday, today, and tomorrow. Present and ulterior
+software engineering, pages 195–216.
+Min Du, Feifei Li, Guineng Zheng, and Vivek Srikumar.
+2017. Deeplog: Anomaly detection and diagnosis
+from system logs through deep learning. In Pro-
+ceedings of the 2017 ACM SIGSAC conference on
+computer and communications security, pages 1285–
+1298.
+Giuseppe D’Aniello, Massimo De Falco, and Nicola
+Mastrandrea. 2021. Designing a multi-agent sys-
+tem architecture for managing distributed operations
+within cloud manufacturing. Evolutionary Intelli-
+gence, 14(4):2051–2058.
+Elastic. 2024.
+Elastic stack (elk) documentation.
+https://www.elastic.co/elastic-stack.
+FastAPI Contributors. 2024. Fastapi documentation.
+https://fastapi.tiangolo.com/.
+Dennis Gannon, Roger Barga, and Neel Sundaresan.
+2017. Cloud-native applications. IEEE Cloud Com-
+puting, 4(5):16–21.
+Grafana Labs. 2024. Grafana documentation. https:
+//grafana.com/docs/.
+Shilin He, Pinjia He, Zhuangbin Chen, Tianyi Yang,
+Yuxin Su, and Michael R Lyu. 2021. A survey on
+automated log analysis for reliability engineering.
+ACM computing surveys (CSUR), 54(6):1–37.
+Weiche Hsieh, Ziqian Bi, Chuanqi Jiang, Junyu Liu,
+Benji Peng, Sen Zhang, Xuanhe Pan, Jiawei Xu, Jin-
+lang Wang, Keyu Chen, and 1 others. 2024. A com-
+prehensive guide to explainable ai: From classical
+models to llms. arXiv:2412.00800.
+Mengkang Hu, Tianxing Chen, Qiguang Chen, Yao Mu,
+Wenqi Shao, and Ping Luo. 2025. Hiagent: Hier-
+archical working memory management for solving
+long-horizon agent tasks with large language model.
+In Proceedings of the 63rd Annual Meeting of the
+Association for Computational Linguistics (Volume
+1: Long Papers), pages 32779–32798.
+Huiqiang Jiang, Qianhui Wu, Chin-Yew Lin, Yuqing
+Yang, and Lili Qiu. 2023. Llmlingua: Compressing
+prompts for accelerated inference of large language
+models. arXiv preprint arXiv:2310.05736.
+Jincheng Jiang, Lixin Wu, Jieqing Yu, Mujiangshan
+Wang, Hui Kong, Zhenxin Zhang, and Junjie Wang.
+2024. Robustness of bilayer railway-aviation trans-
+portation network considering discrete cross-layer
+traffic flow assignment. Transportation Research
+Part D: Transport and Environment, 127:104071.
+Meccy Joy, Srinivasan Venkataramanan, Mohammed
+Ahmed, Mabere Mark, Leeladhar Gudala, Maham-
+mad Shaik, Ashok Kumar Pamidi Venkata, and
+14
+
+Vinay Kumar Reddy Vangoor. 2024. Aiops in ac-
+tion: Streamlining it operations through artificial in-
+telligence. AIOps in Action: Streamlining IT Opera-
+tions Through Artificial Intelligence," International
+Journal of Intelligent Systems and Applications in
+Engineering, 12(23s):2175–2185.
+Jeffrey O. Kephart and David M. Chess. 2003. The
+vision of autonomic computing. Computer, 36(1):41–
+50.
+Sama Khosravifar. 2018. Anomaly Detection Using
+Multi Agent Systems.
+Master’s thesis, Concordia
+University, Montreal, Canada.
+Nikita Kitaev, Łukasz Kaiser, and Anselm Levskaya.
+2020. Reformer: The efficient transformer. arXiv
+preprint arXiv:2001.04451.
+Akshay Krishnamurthy, Keegan Harris, Dylan J Foster,
+Cyril Zhang, and Aleksandrs Slivkins. 2024. Can
+large language models explore in-context?
+Ad-
+vances in Neural Information Processing Systems,
+37:120124–120158.
+Brenden M. Lake, Tomer D. Ullman, Joshua B. Tenen-
+baum, and Samuel J. Gershman. 2017. Building ma-
+chines that learn and think like people. Behavioral
+and Brain Sciences, 40:e253.
+Lamport, Leslie. 2023.
+Tla+ tools and documen-
+tation.
+https://lamport.azurewebsites.net/
+tla/tla.html.
+Leonardo Leite, Carla Rocha, Fabio Kon, Dejan Miloji-
+cic, and Paulo Meirelles. 2019. A survey of devops
+concepts and challenges. ACM computing surveys
+(CSUR), 52(6):1–35.
+Patrick Lewis, Ethan Perez, Aleksandra Piktus, Fabio
+Petroni, Vladimir Karpukhin, and 1 others. 2020.
+Retrieval-augmented generation for knowledge-
+intensive nlp. In Advances in Neural Information
+Processing Systems (NeurIPS), pages 9459–9474. In-
+troduces RAG; relevant to LLM context and retrieval.
+Guohui Li, Ling Bai, Heng Zhang, Qiang Xu, Yuanze
+Zhou, Yuan Gao, Mujiangshan Wang, and Zihao Li.
+2022. Velocity anomalies around the mantle tran-
+sition zone beneath the qiangtang terrane, central
+tibetan plateau from triplicated p waveforms. Earth
+and Space Science, 9(2):e2021EA002060.
+Ming Li, Keyu Chen, Ziqian Bi, Ming Liu, Xinyuan
+Song, Zekun Jiang, Tianyang Wang, Benji Peng,
+Qian Niu, Junyu Liu, Jinlang Wang, Sen Zhang, Xu-
+anhe Pan, Jiawei Xu, and Pohsun Feng. 2024a. Sur-
+veying the mllm landscape: A meta-review of current
+surveys. arXiv preprint arXiv:2409.18991.
+Xinyi Li, Sai Wang, Siqi Zeng, Yu Wu, and Yi Yang.
+2024b.
+A survey on llm-based multi-agent sys-
+tems: workflow, infrastructure, and challenges. Vici-
+nagearth, 1(1):9.
+Jiaheng Liu,
+Dawei Zhu,
+Zhiqi Bai,
+Yancheng
+He, Huanxuan Liao, Haoran Que, Zekun Wang,
+Chenchen Zhang, Ge Zhang, Jiebin Zhang, and
+1 others. 2025.
+A comprehensive survey on
+long context language modeling.
+arXiv preprint
+arXiv:2503.17407.
+Nelson F Liu, Kevin Lin, John Hewitt, Ashwin Paran-
+jape, Michele Bevilacqua, Fabio Petroni, and Percy
+Liang. 2024. Lost in the middle: How language mod-
+els use long contexts. Transactions of the Association
+for Computational Linguistics, 12:157–173.
+Zichang Liu, Jue Wang, Tri Dao, Tianyi Zhou, Binhang
+Yuan, Zhao Song, Anshumali Shrivastava, Ce Zhang,
+Yuandong Tian, Christopher Re, and 1 others. 2023.
+Deja vu: Contextual sparsity for efficient llms at infer-
+ence time. In International Conference on Machine
+Learning, pages 22137–22176. PMLR.
+Weibin Meng, Ying Liu, Yichen Zhu, Shenglin
+Zhang, Dan Pei, Yuqing Liu, Yihao Chen, Ruizhi
+Zhang, Shimin Tao, Pei Sun, and 1 others. 2019.
+Loganomaly: Unsupervised detection of sequential
+and quantitative anomalies in unstructured logs. In
+IJCAI, volume 19, pages 4739–4745.
+Łukasz Mu´slewski, Michał Paj ˛ak, Klaudiusz Migawa,
+and Bogdan Landowski. 2022. An expert system
+for optimizing the operation of a technical system.
+Journal of Quality in Maintenance Engineering,
+28(1):131–153.
+Ziyi Ni, Minglun Han, Feilong Chen, Linghui Meng,
+Jing Shi, Pin Lv, and Bo Xu. 2024.
+Vilas: Ex-
+ploring the effects of vision and language con-
+text in automatic speech recognition. In ICASSP
+2024-2024 IEEE International Conference on Acous-
+tics, Speech and Signal Processing (ICASSP), pages
+11366–11370. IEEE.
+Ziyi Ni, Yifan Li, Ning Yang, Dou Shen, Pin Lyu, and
+Daxiang Dong. 2025a. Tree-of-code: A self-growing
+tree framework for end-to-end code generation and
+execution in complex tasks. In Findings of the As-
+sociation for Computational Linguistics: ACL 2025,
+pages 9804–9819.
+Ziyi Ni, Hao Wang, and Huacan Wang. 2025b. Shield-
+learner: A new paradigm for jailbreak attack defense
+in llms. arXiv preprint arXiv:2502.13162.
+Ziyi Ni, Huacan Wang, Shuo Zhang, Shuo Lu, Ziyang
+He, Wang You, Zhenheng Tang, Yuntao Du, Bill Sun,
+Hongzhang Liu, and 1 others. 2025c. Gittaskbench:
+A benchmark for code agents solving real-world tasks
+through code repository leveraging. arXiv preprint
+arXiv:2508.18993.
+OpenAI. 2023.
+Gpt-4 technical report.
+https://
+openai.com/research/gpt-4.
+Chun-Hui Pan, Yi Qu, Yao Yao, and Mu-Jiang-Shan
+Wang. 2024. Hybridgnn: A self-supervised graph
+neural network for efficient maximum matching in
+bipartite graphs. Symmetry, 16(12):1631.
+15
+
+Judea Pearl, Madelyn Glymour, and Nicholas P. Jew-
+ell. 2016. Causal Inference. Cambridge University
+Press, Cambridge. Accessible primer on causal rea-
+soning for complex systems.
+Benji Peng, Keyu Chen, Ming Li, Pohsun Feng, Ziqian
+Bi, Junyu Liu, and Qian Niu. 2024. Securing large
+language models: Addressing bias, misinformation,
+and prompt attacks. arXiv:2409.08087.
+Prometheus Authors. 2024. Prometheus monitoring
+system. https://prometheus.io/docs/.
+Terrin
+Pulikottil,
+Luis
+Alberto
+Estrada-Jimenez,
+Hamood Ur Rehman, Jose Barata, Sanaz Nikghadam-
+Hojjati, and Leszek Zarzycki. 2021. Multi-agent
+based manufacturing:
+current trends and chal-
+lenges. In 2021 26th IEEE international conference
+on emerging technologies and factory automation
+(ETFA), pages 1–7. IEEE.
+Akond Rahman, Rezvan Mahdavi-Hezaveh, and Lau-
+rie Williams. 2019. A systematic mapping study
+of infrastructure as code research. Information and
+Software Technology, 108:65–77.
+Piotr Ryciak, Katarzyna Wasielewska, and Artur Janicki.
+2022. Anomaly detection in log files using selected
+natural language processing methods. Applied Sci-
+ences, 12(10):5089.
+Arun Kumar Sangaiah, Samira Rezaei, Amir Javadpour,
+Farimasadat Miri, Weizhe Zhang, and Desheng Wang.
+2022. Automatic fault detection and diagnosis in
+cellular networks and beyond 5g: Intelligent network
+management. Algorithms, 15(11):432.
+Alexandre Sarazin, Jérémy Bascans, Jean-Baptiste
+Sciau, Jiefu Song, Bruno Supiot, Aurélie Montarnal,
+Xavier Lorca, and Sébastien Truptil. 2021. Expert
+system dedicated to condition-based maintenance
+based on a knowledge graph approach: Application
+to an aeronautic system. Expert Systems with Appli-
+cations, 186:115767.
+Matthias
+Seitz,
+Felix
+Gehlhoff,
+Luis
+Alberto
+Cruz Salazar, Alexander Fay, and Birgit Vogel-
+Heuser. 2021.
+Automation platform independent
+multi-agent system for robust networks of production
+resources in industry 4.0.
+Journal of Intelligent
+Manufacturing, 32(7):2023–2041.
+Haidong Shao, Jing Lin, Liangwei Zhang, Diego Galar,
+and Uday Kumar. 2021. A novel approach of mul-
+tisensory fusion to collaborative fault diagnosis in
+maintenance. Information Fusion, 74:65–76.
+Jacopo Soldani, Damiano A. Tamburri, and Willem-
+Jan Van Den Heuvel. 2018. The pains and gains of
+microservices: A systematic grey literature review.
+Journal of Systems and Software, 146:215–232.
+Xinyuan Song, Keyu Chen, Ziqian Bi, Qian Niu, Junyu
+Liu, Benji Peng, Sen Zhang, Zichen Yuan, Ming Liu,
+Ming Li, and 1 others. 2025. Transformer: A survey
+and application.
+Ali Asghar Mehdi Syed and Erik Anazagasty. 2024.
+Ai-driven infrastructure automation: Leveraging ai
+and ml for self-healing and auto-scaling cloud envi-
+ronments. International Journal of Artificial Intelli-
+gence, Data Science, and Machine Learning, 5(1):32–
+43.
+Davide Taibi, Valentina Lenarduzzi, and Claus Pahl.
+2019. Microservices anti-patterns: A taxonomy. In
+Microservices: Science and Engineering, pages 111–
+128. Springer.
+Mujiangshan Wang, Yuqing Lin, and Shiying Wang.
+2017a. The nature diagnosability of bubble-sort star
+graphs under the pmc model and mm* model. Int. J.
+Eng. Appl. Sci, 4(3).
+Mujiangshan Wang and Shiying Wang. 2021.
+Con-
+nectivity and diagnosability of center k-ary n-cubes.
+Discrete Applied Mathematics, 294:98–107.
+Mujiangshan Wang, Dong Xiang, Yi Qu, and Guohui
+Li. 2024. The diagnosability of interconnection net-
+works. Discrete Applied Mathematics, 357:413–428.
+Shiying Wang, Zhenhua Wang, Mujiangshan Wang,
+and Weiping Han. 2017b. g-good-neighbor condi-
+tional diagnosability of star graph networks under
+pmc model and mm* model. Frontiers of Mathemat-
+ics in China, 12(5):1221–1234.
+Yijin Wang, Yangfan He, Jianhui Wang, Kun Li, Li Sun,
+Jun Yin, Miao Zhang, and Xueqian Wang. 2025. En-
+hancing intent understanding for ambiguous prompt:
+A human-machine co-adaption strategy. Neurocom-
+puting, page 130415.
+Stefan Wellsandt, Konstantin Klein, Karl Hribernik,
+Marco Lewandowski, Alexandros Bousdekis, Gre-
+goris Mentzas, and Klaus-Dieter Thoben. 2022.
+Hybrid-augmented intelligence in predictive main-
+tenance with digital intelligent assistants. Annual
+Reviews in Control, 53:382–390.
+Michael Wooldridge. 2009. An introduction to multia-
+gent systems. John wiley & sons.
+Liming Xu, Stephen Mak, Maria Minaricova, and
+Alexandra Brintrup. 2024.
+On implementing au-
+tonomous supply chains: A multi-agent system ap-
+proach. Computers in Industry, 161:104120.
+Wei Xu, Ling Huang, Armando Fox, David Patterson,
+and Michael I Jordan. 2009. Detecting large-scale
+system problems by mining console logs. In Pro-
+ceedings of the ACM SIGOPS 22nd symposium on
+Operating systems principles, pages 117–132.
+Xiaojian Xu, Xinping Yan, Chenxing Sheng, Chengqing
+Yuan, Dongling Xu, and Jianbo Yang. 2020. A belief
+rule-based expert system for fault diagnosis of marine
+diesel engines. IEEE transactions on systems, man,
+and cybernetics: systems, 50(2):656–672.
+16
+
+Yadong Xu, JC Ji, Qing Ni, Ke Feng, Michael Beer, and
+Hongtian Chen. 2023. A graph-guided collaborative
+convolutional neural network for fault diagnosis of
+electromechanical systems. Mechanical Systems and
+Signal Processing, 200:110609.
+Zhenning Yang,
+Archit Bhatnagar,
+Yiming Qiu,
+Tongyuan Miao, Patrick Tser Jern Kon, Yunming
+Xiao, Yibo Huang, Martin Casado, and Ang Chen.
+2025. Cloud infrastructure management in the age of
+ai agents. ACM SIGOPS Operating Systems Review,
+59:1–8.
+Liuyi Yao, Zhixuan Chu, Sheng Li, Yaliang Li, Jing
+Gao, and Aidong Zhang. 2021. A survey on causal
+inference. ACM Transactions on Knowledge Discov-
+ery from Data (TKDD), 15(5):1–46.
+Ajay Reddy Yeruva and Vivek Basavegowda Ramu.
+2023. Aiops research innovations, performance im-
+pact and challenges faced. International Journal of
+System of Systems Engineering, 13(3):229–247.
+Jun Yin, Pengyu Zeng, Haoyuan Sun, Yuqin Dai, Han
+Zheng, Miao Zhang, Yachao Zhang, and Shuai Lu.
+2025. Floorplan-llama: Aligning architects’ feed-
+back and domain knowledge in architectural floor
+plan generation. In Proceedings of the 63rd Annual
+Meeting of the Association for Computational Lin-
+guistics (Volume 1: Long Papers), pages 6640–6662.
+Dazhou Yu, Riyang Bao, Gengchen Mai, and Liang
+Zhao. 2025a.
+Spatial-rag: Spatial retrieval aug-
+mented generation for real-world spatial reasoning
+questions. arXiv preprint arXiv:2502.18470.
+Zhenyu Yu. 2025. AI for science: A comprehensive
+review on innovations, challenges, and future direc-
+tions. International Journal of Artificial Intelligence
+for Science (IJAI4S), 1(1).
+Zhenyu Yu, Mohd Yamani Idna Idris, and Pei Wang.
+2025b. Visualizing our changing earth: A creative
+AI framework for democratizing environmental sto-
+rytelling through satellite imagery. In NeurIPS Cre-
+ative AI Track.
+Zhenyu Yu, Mohd Yamani Idna Idris, Pei Wang, and
+Rizwan Qureshi. 2025c. CoTextor: Training-free
+modular multilingual text editing via layered disen-
+tanglement and depth-aware fusion. In NeurIPS Cre-
+ative AI Track.
+Manzil Zaheer, Guru Guruganesh, Kumar Avinava
+Dubey, Joshua Ainslie, Chris Alberti, Santiago On-
+tanon, Philip Pham, Anirudh Ravula, Qifan Wang,
+Li Yang, and 1 others. 2020. Big bird: Transformers
+for longer sequences. Advances in neural informa-
+tion processing systems, 33:17283–17297.
+Lingzhe Zhang, Tong Jia, Mengxi Jia, Yifan Wu, Aiwei
+Liu, Yong Yang, Zhonghai Wu, Xuming Hu, Philip
+Yu, and Ying Li. 2025a. A survey of aiops in the era
+of large language models. ACM Computing Surveys.
+Miao Zhang, Zhenlong Fang, Tianyi Wang, Shuai Lu,
+Xueqian Wang, and Tianyu Shi. 2025b. Ccma: A
+framework for cascading cooperative multi-agent in
+autonomous driving merging using large language
+models.
+Expert Systems with Applications, page
+127717.
+Miao Zhang, Yiqing Shen, Jun Yin, Shuai Lu, and Xue-
+qian Wang. 2024. Adagent: Anomaly detection agent
+with multimodal large models in adverse environ-
+ments. IEEE Access, 12:172061–172074.
+Jieming Zhu, Shilin He, Pinjia He, Jinyang Liu, and
+Michael R. Lyu. 2023. Loghub: A large collection
+of system log datasets for ai-driven log analytics. In
+2023 IEEE 34th International Symposium on Soft-
+ware Reliability Engineering (ISSRE), pages 355–
+366. IEEE.
+Yun Zi. 2024. Time-series load prediction for cloud
+resource allocation using recurrent neural networks.
+Journal of Computer Technology and Software, 3(7).
+17
+
+A
+Future Work
+Our research also highlights the importance of
+safety-by-design principles in automated opera-
+tions systems. The clear separation between infor-
+mation gathering and system modification agents
+provides inherent safety guarantees that should be
+considered essential in any operational automation
+framework.
+Several promising research directions emerge
+from this work. Federated Learning Integration
+could enable AOI frameworks across multiple or-
+ganizations to share operational knowledge while
+preserving privacy and security. Advanced Con-
+text Compression can be explored by developing
+domain-specific models trained on operational data
+to further improve compression efficiency and in-
+formation retention. Formal Verification Exten-
+sions offer the potential to provide stronger guaran-
+tees regarding system behavior and safety proper-
+ties. Human-AI Collaboration could be enhanced
+through interfaces and protocols that support seam-
+less interaction in complex operational scenarios re-
+quiring human judgment. Finally, Real-time Adap-
+tation would allow the framework to respond to
+rapidly changing operational conditions via online
+learning and real-time model updates. As modern
+IT infrastructure grows increasingly complex, intel-
+ligent automation becomes not only beneficial but
+essential. The AOI framework lays a foundation for
+next-generation operational automation systems ca-
+pable of managing this complexity while ensuring
+safety and reliability. With the ongoing adoption
+of cloud-native architectures and microservices,
+frameworks like AOI will become critical enablers
+of scalable, resilient, and efficient operations.
+18

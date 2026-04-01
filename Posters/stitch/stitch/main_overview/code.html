@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>LLM-ASSISTED TRIAGE: A MULTI-AGENT RCA FRAMEWORK</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&amp;family=Space+Grotesk:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#5f11d4",
+                        "background-light": "#f7f6f8",
+                        "background-dark": "#171022",
+                        "accent-teal": "#00F0FF",
+                        "accent-red": "#FF2A2A",
+                        "border-color": "#5f11d4",
+                        "text-main": "#130d1b",
+                        "text-muted": "#6b4c9a"
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"],
+                        "mono": ["JetBrains Mono", "monospace"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem",
+                        "none": "0px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: "Space Grotesk", sans-serif;
+            background-color: theme('colors.background-light');
+            color: theme('colors.text-main');
+        }
+        .font-mono {
+            font-family: "JetBrains Mono", monospace;
+        }
+        
+        /* Brutalist Styles */
+        .brutal-border {
+            border: 1px solid theme('colors.primary');
+        }
+        .brutal-border-b {
+            border-bottom: 1px solid theme('colors.primary');
+        }
+        .brutal-border-r {
+            border-right: 1px solid theme('colors.primary');
+        }
+        .brutal-border-t {
+            border-top: 1px solid theme('colors.primary');
+        }
+        
+        /* Specific Hover Inversions */
+        .hover-invert:hover {
+            background-color: theme('colors.primary');
+            color: white;
+        }
+        .hover-invert:hover .material-symbols-outlined {
+            color: white;
+        }
+        
+        /* Grid Layout for Poster */
+        .poster-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr 1fr;
+            gap: 16px;
+        }
+
+        /* Metric Flasher */
+        @keyframes flash {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        .alert-flash {
+            animation: flash 1s infinite;
+        }
+
+        /* Chart Hover Data */
+        .chart-bar-container:hover .chart-bar {
+            display: none;
+        }
+        .chart-bar-container:hover .chart-value {
+            display: block;
+        }
+        .chart-value {
+            display: none;
+        }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: theme('colors.background-light');
+            border-left: 1px solid theme('colors.primary');
+        }
+        ::-webkit-scrollbar-thumb {
+            background: theme('colors.primary');
+        }
+        
+        /* Expand Interaction (Simulated) */
+        .panel {
+            transition: all 0.2s cubic-bezier(0,0,0.2,1);
+        }
+        .panel:target {
+            position: fixed;
+            top: 5%;
+            left: 5%;
+            width: 90%;
+            height: 90%;
+            z-index: 50;
+            background: white;
+            box-shadow: 0 0 0 100vmax rgba(95, 17, 212, 0.8);
+            overflow: auto;
+        }
+    </style>
+</head>
+<body class="min-h-screen antialiased flex flex-col p-4 md:p-8 selection:bg-primary selection:text-white">
+<!-- Poster Container -->
+<main class="w-full max-w-[1920px] mx-auto bg-white brutal-border flex flex-col relative shadow-2xl overflow-hidden" style="aspect-ratio: 40/27; min-height: 800px;">
+<!-- Header Panel -->
+<header class="brutal-border-b flex justify-between items-end p-6 bg-white shrink-0">
+<div class="flex flex-col gap-2">
+<h1 class="text-4xl md:text-5xl lg:text-6xl font-black uppercase tracking-tighter text-primary leading-none">
+                    LLM-ASSISTED TRIAGE:<br/>A MULTI-AGENT RCA FRAMEWORK
+                </h1>
+<p class="text-text-main font-semibold text-lg uppercase tracking-wide">
+                    Authors: Dr. A. Turing, E. Clarke | Institution: Institute for Advanced Telemetry
+                </p>
+</div>
+<div class="text-right flex flex-col items-end justify-end h-full">
+<span class="font-mono text-sm text-text-muted bg-background-light px-2 py-1 brutal-border">POSTER ID: RCA-2024-X</span>
+</div>
+</header>
+<!-- Live Metric Strip -->
+<section class="h-12 bg-primary text-white flex w-full brutal-border-b shrink-0 overflow-hidden font-mono text-sm uppercase items-center">
+<div class="flex items-center px-4 brutal-border-r h-full min-w-max">
+<span class="mr-2 opacity-70">STATUS:</span>
+<span class="font-bold text-accent-teal">ONLINE &amp; NOMINAL</span>
+</div>
+<div class="flex items-center px-4 brutal-border-r h-full min-w-max">
+<span class="mr-2 opacity-70">ACTIVE INCIDENTS:</span>
+<span class="font-bold text-accent-red alert-flash flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-accent-red block"></span> 02 DETECTED
+                </span>
+</div>
+<div class="flex items-center px-4 brutal-border-r h-full min-w-max">
+<span class="mr-2 opacity-70">CURRENT TRACE:</span>
+<span class="font-bold">TRC-9482-A</span>
+</div>
+<div class="flex items-center px-4 brutal-border-r h-full min-w-max">
+<span class="mr-2 opacity-70">AVG MTTR (LAST 1H):</span>
+<span class="font-bold text-accent-teal">1.2s</span>
+</div>
+<div class="flex items-center px-4 h-full flex-grow whitespace-nowrap animate-[marquee_20s_linear_infinite] opacity-80">
+                &gt; LOG STREAM // KUBE-SYSTEM: POD EVICTION DETECTED // DB-MAIN: CONNECTION POOL EXHAUSTED // REDIS-CACHE: MEMORY LIMIT REACHED // AGENT S01 SPAWNED...
+            </div>
+</section>
+<!-- 3-Column Body -->
+<div class="flex-grow p-4 poster-grid bg-background-light overflow-hidden">
+<!-- Column 1: Intro & Context (1fr) -->
+<div class="flex flex-col gap-4 overflow-y-auto">
+<!-- Panel: Abstract -->
+<article class="bg-white brutal-border p-4 flex flex-col gap-3 relative group panel" id="panel-abstract">
+<div class="flex justify-between items-center brutal-border-b pb-2 mb-2">
+<h2 class="font-bold text-xl uppercase tracking-tight">01 // Abstract</h2>
+<a class="w-8 h-8 flex items-center justify-center brutal-border hover-invert transition-colors" href="#panel-abstract" title="Expand">
+<span class="material-symbols-outlined text-lg" data-icon="add">add</span>
+</a>
+</div>
+<p class="font-mono text-xs leading-relaxed text-justify">
+                        Microservice architectures introduce immense complexity in root cause analysis (RCA) during system failures. Traditional telemetry alerts often trigger cascade events, overwhelming SREs. We propose a multi-agent framework leveraging Large Language Models (LLMs) to autonomously ingest distributed traces, logs, and metrics, performing step-wise deductive reasoning to isolate the fault origin.
+                    </p>
+<p class="font-mono text-xs leading-relaxed text-justify mt-2">
+                        By structuring LLMs as specialized agents (Log Parser, Metric Analyzer, Topology Mapper), our system reduces Mean Time To Resolution (MTTR) by 84% in simulated chaotic environments compared to baseline heuristic alerting.
+                    </p>
+</article>
+<!-- Panel: Methodology -->
+<article class="bg-white brutal-border p-4 flex flex-col gap-3 relative group panel flex-grow" id="panel-method">
+<div class="flex justify-between items-center brutal-border-b pb-2 mb-2">
+<h2 class="font-bold text-xl uppercase tracking-tight">02 // Methodology</h2>
+<a class="w-8 h-8 flex items-center justify-center brutal-border hover-invert transition-colors" href="#panel-method" title="Expand">
+<span class="material-symbols-outlined text-lg" data-icon="add">add</span>
+</a>
+</div>
+<div class="font-mono text-xs bg-background-light p-3 brutal-border mb-3 border-l-4 border-l-primary">
+<span class="text-primary font-bold block mb-1">&gt; INGESTION PHASE</span>
+                        Vectorization of Datadog/Prometheus streams. Window size: T-5m to T+1m relative to alert trigger.
+                    </div>
+<div class="font-mono text-xs bg-background-light p-3 brutal-border mb-3 border-l-4 border-l-primary">
+<span class="text-primary font-bold block mb-1">&gt; TRIAGE PHASE</span>
+                        Agent swarm deployed. Consensus algorithm weights probability of downstream cascading faults vs upstream source.
+                    </div>
+<ul class="font-mono text-[11px] list-none space-y-2 mt-auto">
+<li class="flex items-start gap-2">
+<span class="text-accent-teal mt-0.5">■</span>
+<span><strong>LLM Base:</strong> Llama-3 70B (Instruct)</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="text-accent-teal mt-0.5">■</span>
+<span><strong>Context Window:</strong> 32k tokens</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="text-accent-teal mt-0.5">■</span>
+<span><strong>Latency Budget:</strong> &lt; 2500ms</span>
+</li>
+</ul>
+</article>
+</div>
+<!-- Column 2: Architecture (2fr) -->
+<div class="flex flex-col gap-4 overflow-hidden">
+<article class="bg-white brutal-border p-4 flex flex-col relative panel h-full" id="panel-arch">
+<div class="flex justify-between items-center brutal-border-b pb-2 mb-4 shrink-0">
+<div class="flex items-center gap-4">
+<h2 class="font-bold text-xl uppercase tracking-tight">03 // System Architecture</h2>
+<span class="bg-accent-teal/20 text-primary px-2 py-0.5 font-mono text-[10px] brutal-border border-accent-teal">INTERACTIVE TOPOLOGY</span>
+</div>
+<a class="w-8 h-8 flex items-center justify-center brutal-border hover-invert transition-colors" href="#panel-arch" title="Expand Map">
+<span class="material-symbols-outlined text-lg" data-icon="fullscreen">fullscreen</span>
+</a>
+</div>
+<!-- Diagram Canvas Area -->
+<div class="flex-grow bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCI+PHJlY3Qgd2lkdGg9IjIwIiBoZWlnaHQ9IjIwIiBmaWxsPSJub25lIiBzdHJva2U9IiM1ZjExZDQiIHN0cm9rZS1vcGFjaXR5PSIwLjEiIHN0cm9rZS13aWR0aD0iMSIvPjwvc3ZnPg==')] relative brutal-border overflow-hidden group/canvas cursor-crosshair">
+<!-- Decorative Map Elements -->
+<div class="absolute top-2 left-2 font-mono text-[10px] text-text-muted">GRID: 20x20px // SCALE: 1:1</div>
+<div class="absolute bottom-2 right-2 font-mono text-[10px] text-accent-red alert-flash flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="warning">warning</span> TRACE ACTIVE
+                        </div>
+<!-- Node: Log Ingestion -->
+<div class="absolute top-1/4 left-10 w-32 bg-white brutal-border p-2 shadow-sm hover-invert transition-colors z-10">
+<div class="font-mono text-[9px] text-text-muted mb-1 border-b border-text-muted/30 pb-1">NODE_01</div>
+<div class="font-bold text-sm leading-tight">LOG INGEST</div>
+<div class="font-mono text-[10px] mt-1 text-accent-teal">Kafka Stream</div>
+</div>
+<!-- SVG Connections (Simulated with div lines for stability in prompt constraints) -->
+<div class="absolute top-[calc(25%+24px)] left-[168px] w-16 h-px bg-primary"></div>
+<div class="absolute top-[calc(25%+24px)] left-[232px] w-px h-[calc(25%-24px)] bg-primary"></div>
+<div class="absolute top-1/2 left-[232px] w-16 h-px bg-primary"></div>
+<!-- Node: Router Agent -->
+<div class="absolute top-[calc(50%-24px)] left-[296px] w-32 bg-white brutal-border p-2 shadow-sm border-l-4 border-l-primary hover:border-l-white hover-invert transition-colors z-10">
+<div class="font-mono text-[9px] text-text-muted mb-1 border-b border-text-muted/30 pb-1">AGENT_RTR</div>
+<div class="font-bold text-sm leading-tight">ROUTER LLM</div>
+<div class="font-mono text-[10px] mt-1 text-primary">Zero-Shot Classifier</div>
+</div>
+<!-- Connections from Router -->
+<!-- Up -->
+<div class="absolute top-[calc(25%+24px)] left-[424px] w-px h-[calc(25%-48px)] bg-primary"></div>
+<div class="absolute top-[calc(25%+24px)] left-[424px] w-12 h-px bg-primary"></div>
+<!-- Middle -->
+<div class="absolute top-[calc(50%)] left-[424px] w-12 h-px bg-primary"></div>
+<!-- Down -->
+<div class="absolute top-[calc(50%)] left-[424px] w-px h-[calc(25%-24px)] bg-primary"></div>
+<div class="absolute top-[calc(75%-24px)] left-[424px] w-12 h-px bg-primary border-b-2 border-accent-red border-dashed"></div>
+<!-- Sub-Agents -->
+<div class="absolute top-1/4 left-[472px] w-32 bg-white brutal-border p-2 shadow-sm hover-invert transition-colors z-10">
+<div class="font-mono text-[9px] text-text-muted mb-1 border-b border-text-muted/30 pb-1">AGENT_DB</div>
+<div class="font-bold text-sm leading-tight">DB EXPERT</div>
+</div>
+<div class="absolute top-[calc(50%-24px)] left-[472px] w-32 bg-white brutal-border p-2 shadow-sm hover-invert transition-colors z-10">
+<div class="font-mono text-[9px] text-text-muted mb-1 border-b border-text-muted/30 pb-1">AGENT_NET</div>
+<div class="font-bold text-sm leading-tight">NET EXPERT</div>
+</div>
+<div class="absolute top-[calc(75%-48px)] left-[472px] w-32 bg-white brutal-border border-accent-red p-2 shadow-sm hover:bg-accent-red hover:text-white transition-colors z-10 ring-2 ring-accent-red/20">
+<div class="font-mono text-[9px] text-accent-red mb-1 border-b border-accent-red/30 pb-1">AGENT_K8S</div>
+<div class="font-bold text-sm leading-tight">K8S EXPERT</div>
+<div class="font-mono text-[10px] mt-1 text-accent-red animate-pulse">FAULT LOCATED</div>
+</div>
+</div>
+</article>
+</div>
+<!-- Column 3: Results (1fr) -->
+<div class="flex flex-col gap-4 overflow-y-auto">
+<!-- Panel: Evaluation Metrics -->
+<article class="bg-white brutal-border p-4 flex flex-col gap-4 relative group panel" id="panel-metrics">
+<div class="flex justify-between items-center brutal-border-b pb-2 mb-2">
+<h2 class="font-bold text-xl uppercase tracking-tight">04 // Evaluation</h2>
+<a class="w-8 h-8 flex items-center justify-center brutal-border hover-invert transition-colors" href="#panel-metrics" title="Expand">
+<span class="material-symbols-outlined text-lg" data-icon="add">add</span>
+</a>
+</div>
+<!-- Chart 1: MTTR -->
+<div class="flex flex-col gap-2">
+<h3 class="font-mono text-xs uppercase text-text-muted">Mean Time To Resolution (MTTR)</h3>
+<div class="flex items-center gap-2 chart-bar-container cursor-crosshair">
+<div class="w-20 font-mono text-[10px] text-right shrink-0">Baseline</div>
+<div class="h-6 bg-primary brutal-border w-full relative chart-bar" style="max-width: 100%;"></div>
+<div class="h-6 w-full flex items-center bg-white brutal-border text-primary font-black px-2 chart-value text-sm">45.2 min</div>
+</div>
+<div class="flex items-center gap-2 chart-bar-container cursor-crosshair">
+<div class="w-20 font-mono text-[10px] text-right shrink-0">Heuristic</div>
+<div class="h-6 bg-primary brutal-border w-full relative chart-bar opacity-70" style="max-width: 60%;"></div>
+<div class="h-6 w-full flex items-center bg-white brutal-border text-primary font-black px-2 chart-value text-sm">28.1 min</div>
+</div>
+<div class="flex items-center gap-2 chart-bar-container cursor-crosshair">
+<div class="w-20 font-mono text-[10px] text-right shrink-0 text-primary font-bold">LLM-RCA</div>
+<div class="h-6 bg-accent-teal brutal-border border-primary w-full relative chart-bar" style="max-width: 15%;"></div>
+<div class="h-6 w-full flex items-center bg-accent-teal brutal-border border-primary text-primary font-black px-2 chart-value text-sm">7.4 min</div>
+</div>
+</div>
+<div class="h-px bg-primary w-full my-2"></div>
+<!-- Chart 2: Accuracy Matrix -->
+<div class="flex flex-col gap-2">
+<h3 class="font-mono text-xs uppercase text-text-muted">Root Cause Accuracy Matrix</h3>
+<div class="grid grid-cols-3 gap-1 bg-primary p-px brutal-border">
+<!-- Header row -->
+<div class="bg-white p-1 font-mono text-[9px] text-center">Source</div>
+<div class="bg-white p-1 font-mono text-[9px] text-center">Baseline</div>
+<div class="bg-white p-1 font-mono text-[9px] text-center">LLM</div>
+<!-- Data Row 1 -->
+<div class="bg-white p-2 font-mono text-[10px] flex items-center justify-center">Network</div>
+<div class="bg-primary/40 p-2 font-mono text-[10px] text-center text-white flex items-center justify-center">62%</div>
+<div class="bg-primary p-2 font-mono text-[10px] text-center text-white flex items-center justify-center font-bold">94%</div>
+<!-- Data Row 2 -->
+<div class="bg-white p-2 font-mono text-[10px] flex items-center justify-center">Database</div>
+<div class="bg-primary/60 p-2 font-mono text-[10px] text-center text-white flex items-center justify-center">78%</div>
+<div class="bg-primary p-2 font-mono text-[10px] text-center text-white flex items-center justify-center font-bold">98%</div>
+<!-- Data Row 3 -->
+<div class="bg-white p-2 font-mono text-[10px] flex items-center justify-center">Compute</div>
+<div class="bg-primary/30 p-2 font-mono text-[10px] text-center text-white flex items-center justify-center">41%</div>
+<div class="bg-primary/80 p-2 font-mono text-[10px] text-center text-white flex items-center justify-center font-bold">89%</div>
+</div>
+</div>
+</article>
+<!-- Panel: Conclusion -->
+<article class="bg-primary text-white brutal-border p-4 flex flex-col gap-2 mt-auto">
+<h2 class="font-bold text-lg uppercase tracking-tight text-accent-teal">Conclusion</h2>
+<p class="font-mono text-xs leading-relaxed">
+                         The deployment of specialized LLM agents transforms structural chaos into actionable insights. By interpreting raw logs within topological context, the framework acts as an autonomous Tier-1 responder, escalating only validated, pinpointed faults to human operators.
+                     </p>
+</article>
+</div>
+</div>
+<!-- Footer -->
+<footer class="brutal-border-t bg-white p-4 shrink-0 flex justify-between items-center h-24">
+<div class="flex flex-col gap-1 w-2/3">
+<span class="font-bold uppercase text-sm">References</span>
+<p class="font-mono text-[10px] text-text-muted truncate">
+                    [1] Turing, A. et al. (2024). "Generative AI in Telemetry Pipeline Processing." Journal of SRE, 14(2).<br/>
+                    [2] Clarke, E. (2023). "Topology-Aware Heuristics." IEEE Microservices.
+                </p>
+</div>
+<div class="flex items-center gap-4">
+<div class="text-right flex flex-col items-end">
+<span class="font-bold uppercase text-sm">Scan for Repo</span>
+<span class="font-mono text-[10px] text-primary">github.com/iat/llm-rca</span>
+</div>
+<!-- Simulated QR Code -->
+<div class="w-16 h-16 bg-white brutal-border p-1 grid grid-cols-4 grid-rows-4 gap-0.5">
+<div class="bg-primary col-span-2 row-span-2"></div>
+<div class="bg-white"></div>
+<div class="bg-primary"></div>
+<div class="bg-primary"></div>
+<div class="bg-white"></div>
+<div class="bg-primary col-span-2"></div>
+<div class="bg-primary"></div>
+<div class="bg-white"></div>
+<div class="bg-primary row-span-2"></div>
+<div class="bg-white"></div>
+<div class="bg-primary"></div>
+<div class="bg-primary"></div>
+</div>
+</div>
+</footer>
+</main>
+</body></html>

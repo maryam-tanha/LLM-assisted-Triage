@@ -1,0 +1,342 @@
+\documentclass[conference]{IEEEtran}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, backgrounds, calc, fit, positioning,
+                shadows.blur, shapes.geometric, shapes.misc}
+
+\usepackage{tabularx}
+\usepackage{float}
+\usepackage{flushend}
+
+\usepackage{calc}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+\begin{document}
+
+\title{An Open-source LLM-Assisted System for IT/SRE Triage }
+
+\makeatletter
+\newcommand{\linebreakand}{%
+  \end{@IEEEauthorhalign}
+  \hfill\mbox{}\par
+  \mbox{}\hfill\begin{@IEEEauthorhalign}
+}
+\makeatother
+
+
+
+\author{
+\IEEEauthorblockN{Student}
+\IEEEauthorblockA{\textit{Khoury College of Computer Sciences} \\
+\textit{Northeastern University}\\
+Vancouver, Canada \\
+pandya.kal@northeastern.edu}
+%\hspace{11.5cm}
+\and
+
+\IEEEauthorblockN{Dawood Sajjadi}
+\IEEEauthorblockA{\textit{TBC} \\
+\textit{}\\
+ \\
+}
+\and
+\IEEEauthorblockN{Maryam Tanha}
+\IEEEauthorblockA{\textit{Khoury College of Computer Sciences} \\
+\textit{Northeastern University}\\
+Vancouver, Canada \\
+m.tanha@northeastern.edu}
+}
+
+
+\maketitle
+\begin{abstract}
+
+\end{abstract}
+
+\begin{IEEEkeywords}
+
+\end{IEEEkeywords}
+\section{Introduction}
+A production incident in a cloud-native microservice architecture puts Site Reliability Engineering (SRE) and DevOps teams
+under immediate pressure: they must Secure Shell (\texttt{SSH}) into multiple hosts, sift through logs, and
+reconcile metrics from different monitoring systems, often in parallel, under time constraints,
+and without a clear picture of what is failing~\cite{zhang2025aiops_survey, chen2024rcacopilot}.
+Large Language Models (LLMs) have begun to change this picture, but not by replacing the toolchain. Survey evidence
+makes it clear that models must be coupled with existing systems to stay effective, not substituted
+for them~\cite{zhang2025aiops_survey, szandala2025aiops_reliability}. One finding in particular
+shapes our architecture: LLMs reason well about generic failure patterns but consistently fail
+at \emph{topological reasoning}: they cannot trace a fault through a specific service call chain
+unless the dependency graph is given to them explicitly~\cite{xu2025openrca}.
+
+We address this with an open-source, hierarchical multi-agent framework that grounds LLM
+reasoning in a YAML service topology and enforces a read-only execution model throughout the
+investigation~\cite{kholkar2025safeops}. Log ingestion is handled by local ``thin sidecar''
+agents that structure raw output via in-context learning before passing it upstream~\cite{xu2024divlog},
+keeping evidence compact and typed rather than forwarding raw streams that would exhaust a
+context window.
+
+%\section{Background \& Motivation}
+
+
+\section{Related Work}
+
+\subsection{Multi-Agent Architectures for IT Operations}
+Splitting a complex task across specialized agents consistently outperforms asking a single
+model to handle everything. AgentOrchestra~\cite{zhang2025agentorchestra} formalizes this
+with the TEA (Tool-Environment-Agent) protocol, where a central planner delegates to
+domain-specific sub-agents; the architecture achieves 89.04\% average across difficulty levels on the General AI Assistants (GAIA) benchmark, well above
+monolithic baselines. MetaGPT~\cite{hong2024metagpt} takes a different angle: it assigns each
+agent a Standard Operating Procedure modeled on human job descriptions, which constrains
+output format and sharply reduces coordination errors. Both works converge on the same
+conclusion: role boundaries matter as much as model capability.
+
+Context management is where many multi-agent IT systems break down. AOI~\cite{bai2025aoi}
+compresses intermediate findings before passing them to a high-level observer, retaining 92.8\%
+of critical information at 72.4\% compression, while cutting mean time to recovery by 34.4\%
+over the best prior baseline. Three further systems bear directly on our design. Triangle~\cite{yu2025triangle} demonstrated over 20\% triage
+accuracy improvement (reaching 91.7\% at 5-hop routing) in a production deployment serving
+tens of millions of users. MasRouter~\cite{yue2025masrouter} routes queries to cheaper models
+when complexity permits, reducing HumanEval overhead by up to 52\%. SageCopilot~\cite{liao2025sagecopilot}
+introduced a mandatory output-checking phase before delivery, demonstrating measurable
+quality gains from post-generation validation.
+
+\subsection{LLM-Based Root Cause Analysis}
+Production deployments reveal a pattern: raw data in, low accuracy out. RCACopilot at
+Microsoft~\cite{chen2024rcacopilot} addressed this by summarizing structured diagnostic
+information before passing it to the prediction model, gaining 0.077 absolute Micro-F1 points
+over the unsummarized baseline. FLASH~\cite{zhang2024flash} goes further, decomposing the
+full diagnostic lifecycle into four supervised states and learning from historical failure
+runs; on 250 real incidents, it hit 73.9\% accuracy and brought average diagnosis time down
+to 5.3 minutes against a 90-minute human mitigation baseline.
+
+Agent separation is not just an architectural preference; it measurably shifts outcomes.
+MA-RCA~\cite{fu2026marca} splits retrieval and validation into distinct agents and reports
+95.8\% accuracy on the Nezha cloud-native dataset, a result the authors attribute directly
+to eliminating context-switching between hypothesis generation and evidence checking.
+D-Bot~\cite{zhou2023dbot} applies Tree-of-Thought reasoning to database anomalies, which
+forces the planner to branch on intermediate findings rather than commit to a flat task list
+upfront.
+
+Not every scenario suits the same approach. Hy-LIFT~\cite{salman2025hylift} shows that for
+5G/6G networks, rule-based labeling handles known fault classes well; the LLM layer is reserved
+for novel or ambiguous cases, reaching a macro-F1 of roughly 89--90\%. At the other end,
+an AIOps reliability study~\cite{szandala2025aiops_reliability} finds that zero-shot LLMs
+misclassify benign traffic spikes as security incidents at a non-trivial rate.
+
+\subsection{Specialist Agent Design and Data Ingestion}
+Ashraf and Talavera~\cite{ashraf2025autonomous} find that assigning agents to narrow
+functional roles reduces coordination failures; agents handling multiple overlapping
+concerns produce more conflicting decisions and lower task accuracy.
+
+Narrowing agent scope also changes what data each agent should receive.
+Dumping raw infrastructure logs into an LLM context is a well-documented failure mode: token
+budgets overflow, important lines get truncated, and the model cannot distinguish noise from
+signal. DivLog~\cite{xu2024divlog} addresses template extraction specifically by sampling a
+maximally diverse set of log candidates offline and using them as in-context
+examples at inference time. Across 16 LogPAI benchmarks it achieves 98.1\% parsing accuracy,
+which makes structured templates a reliable input rather than an aspiration.
+
+\subsection{Agent Communication, Security, and Resilience}
+How agents communicate is as consequential as what they compute. LACP~\cite{li2025lacp}
+proposes a three-layer (Semantic, Transactional, Transport) telecom-inspired protocol
+with PLAN/ACT/OBSERVE message types and end-to-end cryptographic signing,
+adding only 0.03\,ms of overhead while making silent failures detectable. Huang
+et al.~\cite{huang2024resilience} inject faulty agents into three topology types and measure
+the damage: hierarchical systems lose only 5.5\% accuracy; flat topologies, lacking clear
+authority, reach decision paralysis at 10.5\%; linear chains, where each hop re-transmits
+errors, degrade by 23.7\%.
+
+On the security side, Kholkar and Ahuja~\cite{kholkar2025safeops} demonstrate a
+``policy-as-prompt'' pattern that encodes governance rules into runtime classifiers; their
+least-privilege framing directly informs our read-only execution policy.
+Looking ahead to Phase~2, the AWS Model Context Protocol (MCP) architecture~\cite{aws2025mcp_sre} shows how MCP servers let agents discover tools dynamically without bespoke API wrappers.
+
+
+\section{Methodology}
+
+% ─────────────────────────────────────────────────────────────
+%  ARCHITECTURE FIGURE
+% ─────────────────────────────────────────────────────────────
+\input{fig_architecture}
+
+% ─────────────────────────────────────────────────────────────
+%  METHODOLOGY TEXT
+% ─────────────────────────────────────────────────────────────
+
+Fig.~\ref{fig:architecture} shows the full system. We built it as a
+three-tier LangGraph graph: a Parent Agent that plans and decides, a
+pool of Specialist Agents that gather evidence in parallel, and a
+Synthesis Agent that correlates findings across domains before the
+next cycle. Specialist workers report exclusively through the orchestrator, a design
+choice grounded in resilience evidence that flat and linear topologies suffer
+substantially higher accuracy loss under agent failure~\cite{huang2024resilience}.
+An Evaluator Agent reviews the draft RCA report before it is released.
+
+\subsection{Service Configuration}
+
+We wanted operators to describe their infrastructure once, in a format
+they already understand, without writing any agent-specific code. The
+result is a per-product YAML file validated by Pydantic at startup.
+
+Each entry in the \texttt{services} block captures what a healthy
+instance looks like (\texttt{expected\_behavior}), what patterns
+signal trouble (\texttt{known\_failures}), and which shell commands
+collect an initial evidence snapshot before the investigation begins
+(\texttt{context\_commands}). An \texttt{agents} key references
+separate YAML files describing each specialist, including routing
+guidance (\texttt{when\_to\_use}, \texttt{do\_not\_use}) that the
+Parent Agent reads verbatim when deciding whom to assign. Nothing
+is hardcoded in the planner prompt; the topology is loaded at
+invocation time, so adding a service means editing one file.
+
+\subsection{Parent Agent and Planning}
+
+The Parent Agent is the only node in the graph that can change the
+investigation's direction. At each cycle it receives the incident
+summary, the full YAML topology, and the accumulated
+\texttt{cumulative\_history} from all prior cycles. We bind the LLM
+with \texttt{tool\_choice=``any''} to ensure it always produces a
+typed action rather than free text. This replanning pattern follows multi-agent RCA
+designs that explicitly separate retrieval from synthesis~\cite{fu2026marca, zhou2023dbot}.
+
+The LLM has exactly two choices. \texttt{create\_subtasks} emits a
+list of \texttt{Subtask} objects, each specifying a target service,
+container, natural-language description, a falsifiable hypothesis, and
+the specialist to assign. The LangGraph router converts these into
+\texttt{Send()} fan-out dispatches that run in parallel.
+\texttt{write\_rca\_conclusion} closes the cycle, producing a
+structured report with root cause, contributing factors, evidence
+summary, and recommended actions.
+
+We chose not to rely on the agent voluntarily concluding: once
+\texttt{current\_cycle} reaches \texttt{MAX\_CYCLES} (default:~3),
+the framework hard-wires \texttt{write\_rca\_conclusion} as the only
+permitted tool call; the loop cannot run indefinitely.
+
+\subsection{Specialist Agents}
+
+A specialist is a LangChain Reasoning + Acting (ReAct) agent with a deliberately narrow
+scope. Its only tool is \texttt{run\_command}; its system prompt
+encodes domain knowledge for one area (logs, runtime resources,
+network connectivity, database internals, etc.) and nothing else.
+We found that narrowing the prompt sharply reduced
+cross-domain confusions: a log agent that also ``knows about''
+Redis tends to reach for Redis commands at the wrong time~\cite{ashraf2025autonomous}.
+
+Before the ReAct loop begins, the framework pre-runs the service's
+\texttt{context\_commands} and, in Docker mode, tails the container
+logs. Both are injected into the agent's opening message, giving it
+a concrete evidence baseline without spending any tool-call budget; log output is structured
+at ingestion using in-context parsing templates~\cite{xu2024divlog}.
+The loop then runs until the agent emits a structured final answer or
+hits \texttt{MAX\_ITERATIONS} (default:~10), at which point a
+low-confidence \texttt{SpecialistFinding} is returned so the cycle
+can continue rather than crash.
+
+Commands run through one of two backends, both presenting the same
+interface to the agent. \textit{Docker exec} calls
+\texttt{docker exec <container> sh -c <cmd>} on the local host and
+is the default for demo deployments. \textit{SSH} uses a pooled
+paramiko client keyed by \texttt{(host, port, username)}, reusing
+open transport sessions to avoid repeated handshake overhead in
+production environments.
+
+Adding a specialist requires no changes to the orchestration layer.
+A new module calls \texttt{register()} at import time; the graph
+builder wires the new node in at startup and the Parent Agent sees it
+in its routing prompt the next invocation.
+
+\subsection{Synthesis and Evaluation}
+
+After each cycle's specialists finish, the Synthesis Agent reads new
+\texttt{SpecialistFinding} objects tracked via a \texttt{findings\_offset} pointer to
+avoid reprocessing prior cycles. Each finding conforms to a fixed typed schema, keeping
+synthesis predictable regardless of compression quality~\cite{bai2025aoi}. The agent
+produces a \texttt{CycleSummary}: a narrative paragraph,
+\texttt{KEY\_FINDINGS} bullets, and \texttt{RECOMMENDATIONS}. We give
+it no tool access deliberately; its job is cross-domain correlation,
+noticing for example that a memory spike on the Redis container
+explains the connection-pool exhaustion a log agent reported on the
+API service. Keeping it tool-free means reasoning over the full
+evidence window without branching into further data collection.
+The resulting summary feeds into \texttt{cumulative\_history}, which
+the Parent Agent reads at the start of every subsequent cycle.
+
+When the Parent Agent calls \texttt{write\_rca\_conclusion}, the draft
+report goes to the Evaluator Agent rather than directly to the user.
+The Evaluator scores it on accuracy, completeness, professionalism,
+and actionability. A passing score releases the report; a failing
+score sends structured revision feedback back to the Parent Agent,
+which re-enters the loop with that feedback as additional context.
+This mirrors the post-generation review design of SageCopilot~\cite{liao2025sagecopilot}
+and is partly motivated by misclassification rates seen in zero-shot LLM
+deployments~\cite{szandala2025aiops_reliability}.
+
+\subsection{Security Model}
+
+We treat agents as untrusted code paths. Every command, regardless of
+which specialist issues it, passes through two sequential checks before
+execution and before its output reaches the LLM.
+
+The \textit{command allowlist} applies a deny-first rule: a command is
+rejected the moment it matches any blocked pattern (destructive
+operations such as \texttt{rm} and \texttt{chmod}; shell redirection;
+code injection via \texttt{| bash}; and outbound network tools like
+\texttt{curl} and \texttt{nc}). Only commands whose prefix appears on
+the explicit allow-list (log readers, system status utilities, and
+service CLIs like \texttt{redis-cli} and \texttt{psql}) proceed to
+execution. Rejected commands return \texttt{"BLOCKED: <reason>"} so
+the agent can adapt rather than hang.
+
+The \textit{output redactor} scrubs every response before it leaves
+the execution layer. It strips AWS access keys, PEM private-key
+blocks, bearer tokens, credential assignments
+(\texttt{api\_key=}, \texttt{password=}), email addresses, full IPv4
+addresses (partially preserved for subnet context), and long base64
+strings. The redactor runs on every execution path, including the
+host-side \texttt{docker logs} fetch, so no raw secrets ever appear
+in the LLM's context.
+
+Both checks are non-negotiable at every node. The least-privilege
+principle~\cite{kholkar2025safeops} holds across the entire system:
+agents can read diagnostic state but cannot alter it, exfiltrate
+credentials, or escalate beyond their assigned investigation scope.
+
+
+\section{Experiments and Results}
+
+
+\section{Conclusion and Future Directions}
+
+
+
+%% The acknowledgments section is defined using the "acks" environment
+%% (and NOT an unnumbered section). This ensures the proper
+%% identification of the section in the article metadata, and the
+%% consistent spelling of the heading.
+
+\section*{Acknowledgment}
+
+%%
+%% The next two lines define the bibliography style to be used, and
+%% the bibliography file.
+\bibliographystyle{ieeetr}
+\bibliography{references}
+
+%%
+%% If your work has an appendix, this is the place to put it.
+%\appendix
+  
+
+
+\end{document}
+\endinput
+%%
+%% End of file `sample-authordraft.tex'.
