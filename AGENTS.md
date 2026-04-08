@@ -2,7 +2,7 @@
 
 This file tracks all major work streams, tasks, and their current status across the project.
 
-**Updated:** 2026-03-24
+**Updated:** 2026-04-07
 
 ---
 
@@ -82,17 +82,19 @@ This file tracks all major work streams, tasks, and their current status across 
 
 | Task | Status | Notes |
 |------|--------|-------|
-| EXP-01: Dovecot IMAP connection limit exhaustion | ✅ Designed | Ready to run — `mail_max_userip_connections=1` |
-| EXP-02: PostgreSQL database outage | ✅ Designed | Ready to run — `docker stop mail-app-db-1` |
-| EXP-03: Redis session cache OOM (silent eviction) | ✅ Designed | Ready to run — `maxmemory=1mb`, needs 30+ users |
-| EXP-04: Postfix message size limit misconfiguration | ✅ Designed | Ready to run — `message_size_limit=1024` |
-| EXP-05: Full mailserver crash | ✅ Designed | Ready to run — `docker stop mail-app-mailserver-1` |
-| Run EXP-01 end-to-end (inject → Locust → agent → restore) | ⬜ | |
-| Run EXP-02 end-to-end | ⬜ | |
-| Run EXP-03 end-to-end | ⬜ | |
-| Run EXP-04 end-to-end | ⬜ | |
-| Run EXP-05 end-to-end | ⬜ | |
-| Document agent outputs and RCA accuracy per experiment | ⬜ | For paper results section |
+| EXP-01: Dovecot IMAP connection limit exhaustion | ✅ Done | Agent correct — 4 cycles, 136s, ~$0.49 |
+| EXP-02: PostgreSQL max connections exhaustion | ✅ Done | Agent correct — 1 cycle, ~30s, ~$0.027 |
+| EXP-03: PHP memory limit too low | ✅ Done | Agent correct — 2 cycles, 75s, ~$0.14 |
+| EXP-04: Postfix per-client send rate limit | ✅ Done | Agent correct — 1 cycle, 45s, ~$0.04 |
+| EXP-05: DNS resolver corruption in mailserver | ✅ Done | Agent correct — 3 cycles, 155s, ~$0.58 |
+| EXP-06: Container hard memory limit (OOM) | ✅ Done | Agent correct — 2 cycles, 95s, ~$0.32 |
+| Run EXP-01 end-to-end (inject → Locust → agent → restore) | ✅ | |
+| Run EXP-02 end-to-end | ✅ | |
+| Run EXP-03 end-to-end | ✅ | |
+| Run EXP-04 end-to-end | ✅ | |
+| Run EXP-05 end-to-end | ✅ | |
+| Run EXP-06 end-to-end | ✅ | |
+| Document agent outputs and RCA accuracy per experiment | ✅ | Results documented in EXPERIMENTS.md |
 
 ---
 
@@ -111,11 +113,28 @@ This file tracks all major work streams, tasks, and their current status across 
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Literature review (20 papers) | ✅ | Summarised in `paper/Literature_Review_Summary.md` |
-| Architecture design doc | ✅ | `paper/Summary-SP2026-Kalhar.md` |
-| LaTeX paper draft (`paper/LLM_assisted_Triage/main.tex`) | 🔄 | IEEEtran format, in progress |
-| Experimental results section | ⬜ | Depends on running experiments |
+| Literature review (20 papers) | ✅ | Summarised in `Literature_Review_Summary.md` |
+| Architecture design doc | ✅ | `Summary-SP2026-Kalhar.md` |
+| LaTeX paper — Abstract + Keywords | ✅ | Written 2026-04-04 |
+| LaTeX paper — Introduction | ✅ | No changes needed, already accurate |
+| LaTeX paper — Related Work | ✅ | No changes needed, already accurate |
+| LaTeX paper — Methodology §III.1 Architecture overview | ✅ | Evaluator Agent removed; profile system introduced |
+| LaTeX paper — Methodology §III.2 Service Configuration | ✅ | Expanded to multi-file profile directory system; YAML-only specialists added |
+| LaTeX paper — Methodology §III.3 Parent Agent | ✅ | Manual investigation mode added |
+| LaTeX paper — Methodology §III.4 Specialist Agents | ✅ | Docker host context gathering added; YAML specialist path added |
+| LaTeX paper — Methodology §III.5 Synthesis | ✅ | Renamed from "Synthesis and Evaluation"; Evaluator Agent removed; future work note added |
+| LaTeX paper — Methodology §III.6 Security Model | ✅ | No changes needed, already accurate |
+| Architecture figure (`LLM_assisted_Triage/fig_architecture.tex`) | ✅ | Evaluator node, PASS node, FAIL arrow removed; conclusion routes directly to Final RCA Report; profile directory label added |
+| Humanization pass on paper | ✅ | AI markers removed, em dashes replaced, voice consistent with original sections |
+| Experimental results section | ⬜ | Depends on completing experiments (Section IV left empty intentionally) |
+| Conclusion section | ⬜ | Left empty intentionally — to be written after experiments |
 | Evaluation metrics defined | ⬜ | Precision/recall of root cause identification |
+
+### Paper Location
+- `LLM_assisted_Triage/main.tex` — main paper (IEEEtran)
+- `LLM_assisted_Triage/fig_architecture.tex` — TikZ architecture figure
+- `LLM_assisted_Triage/references.bib` — bibliography (20 entries)
+- `LLM_assisted_Triage/PAPER_UPDATE_PLAN.md` — detailed plan used for this update session
 
 ---
 

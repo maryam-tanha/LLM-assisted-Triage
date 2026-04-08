@@ -107,7 +107,7 @@ services:
       - pattern: "PHP Fatal error"
         likely_cause: "Roundcube PHP runtime error — check Apache error log"
     context_commands:
-      - "sudo docker exec mail-app-roundcube-1 sh -c \"cat /var/www/html/logs/errors.log 2>/dev/null | tail -50 || echo 'No error log found'\""
+      - "sudo docker logs mail-app-roundcube-1 --tail 100"
       - "sudo docker exec mail-app-roundcube-1 sh -c \"cat /var/www/html/config/config.inc.php | grep -E 'default_host|smtp_server|db_dsnw'\""
       - "sudo docker exec mail-app-roundcube-1 curl -s -o /dev/null -w '%{http_code}' http://localhost/"
       - "sudo docker exec mail-app-roundcube-1 df -h"
@@ -115,10 +115,11 @@ services:
       - "sudo docker exec mail-app-roundcube-1 sh -c \"ps aux | grep apache\""
       - "sudo docker exec mail-app-roundcube-1 uptime"
     log_hints:
-      - "PHP/Apache errors: cat /var/www/html/logs/errors.log | tail -50"
+      - "Apache error.log and access.log are symlinked to /dev/stderr and /dev/stdout — they CANNOT be read from inside the container. Use 'sudo docker logs mail-app-roundcube-1' from the host instead."
+      - "The /var/www/html/logs/ directory is typically empty in this container image. Do NOT waste iterations trying to read it."
       - "If curl http://localhost/ returns non-200, Apache is down — check ps aux."
       - "Roundcube config: cat /var/www/html/config/config.inc.php to verify IMAP/SMTP host and DB DSN."
-      - "IMAP connection failures appear as 'IMAP Error' in errors.log — correlate with mailserver logs."
+      - "IMAP connection failures appear as 'IMAP Error' in docker logs — correlate with mailserver logs."
     additional_info:
       owner: frontend-team
       dependencies: [mailserver, db]
@@ -149,6 +150,10 @@ services:
       - "sudo docker exec mail-app-db-1 psql -U roundcube -d roundcube -c '\\dt'"
       - "sudo docker exec mail-app-db-1 psql -U roundcube -d roundcube -c 'SELECT COUNT(*) FROM users;'"
       - "sudo docker exec mail-app-db-1 psql -U roundcube -d roundcube -c 'SELECT version();'"
+      - "sudo docker exec mail-app-db-1 psql -U roundcube -d roundcube -c 'SHOW max_connections;'"
+      - "sudo docker exec mail-app-db-1 psql -U roundcube -d roundcube -c 'SELECT count(*) FROM pg_stat_activity;'"
+      - "sudo docker exec mail-app-db-1 psql -U roundcube -d roundcube -c 'SELECT state, count(*) FROM pg_stat_activity GROUP BY state;'"
+      - "sudo docker logs mail-app-db-1 --tail 100"
       - "sudo docker exec mail-app-db-1 df -h"
       - "sudo docker exec mail-app-db-1 free -m"
       - "sudo docker exec mail-app-db-1 ps aux"
@@ -156,6 +161,8 @@ services:
     log_hints:
       - "psql -U roundcube -d roundcube -c '\\dt' — if no tables, Roundcube never initialised the schema."
       - "psql -U roundcube -d roundcube -c 'SELECT COUNT(*) FROM users;' — confirms DB connectivity and user records."
+      - "SHOW max_connections; — compare against pg_stat_activity count to detect connection exhaustion."
+      - "docker logs mail-app-db-1 — PostgreSQL errors (FATAL: too many connections) appear in container stdout, not in an internal log file."
       - "df -h checks available disk — a full volume prevents PostgreSQL writes."
     additional_info:
       owner: infra-team
@@ -191,12 +198,14 @@ services:
       - "sudo docker exec mail-app-redis-1 redis-cli INFO clients"
       - "sudo docker exec mail-app-redis-1 redis-cli INFO stats"
       - "sudo docker exec mail-app-redis-1 redis-cli DBSIZE"
+      - "sudo docker logs mail-app-redis-1 --tail 50"
       - "sudo docker exec mail-app-redis-1 df -h"
       - "sudo docker exec mail-app-redis-1 free -m"
     log_hints:
       - "redis-cli PING must return PONG — any other response means Redis is unhealthy."
       - "redis-cli INFO memory shows used_memory vs maxmemory — check for eviction pressure."
       - "redis-cli INFO clients shows connected_clients — expect >= 1 from Roundcube."
+      - "There are no Redis log files inside the container (/var/log/redis/ does not exist). Use 'sudo docker logs mail-app-redis-1' for Redis server output."
     additional_info:
       owner: infra-team
       dependencies: []

@@ -50,6 +50,7 @@ class CycleSummary(BaseModel):
     summary: str                  # narrative cross-domain correlation
     key_findings: list[str]       # bullet-point findings
     recommendations: list[str]    # what to investigate next
+    hypothesis_status: list[str] = []  # LEADING / RULED_OUT / NEEDS_INVESTIGATION
     specialist_types: list[str]   # which agent types contributed
     timestamp: datetime
 

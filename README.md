@@ -1,30 +1,44 @@
 # LLM-Assisted Triage
 
-Multi-agent RCA framework for automated incident investigation in cloud/microservice environments.
+Multi-agent Root Cause Analysis (RCA) framework for automated incident investigation in cloud/microservice environments. Also an active research project with an accompanying IEEE conference paper.
 
 ## Project Structure
 
 ```
 v1/
-├── rca-framework/          # Core RCA agent framework
-│   ├── agents/            # Parent + specialist agents
-│   ├── config/            # Prompts, models, service configs
-│   ├── graph/             # LangGraph orchestration + registry
-│   ├── security/          # Command allowlist + redaction
-│   ├── tools/             # Docker/SSH executors
-│   ├── tests/             # Unit tests
-│   ├── demo.py            # Entry point
-│   └── requirements.txt   # Python dependencies
-├── paper/                 # Research paper (LaTeX)
-└── Summary-SP2026-Kalhar.docx  # Project summary
-
+├── rca-framework/              # Core RCA agent framework
+│   ├── core/
+│   │   ├── agents/             # Parent, synthesis, and specialist agents
+│   │   │   └── specialists/    # log_agent, runtime_status_agent, yaml_specialist, base
+│   │   ├── graph/              # LangGraph builder, state, registry
+│   │   ├── tools/              # docker_tool.py, ssh_tool.py
+│   │   └── security/           # allowlist.py, redactor.py
+│   ├── framework/              # Shared models, loader, LLM client, usage tracker
+│   ├── profiles/               # Per-product config directories
+│   │   ├── voting_app/         # profile.yaml, parent.yaml, synthesis.yaml, agents/
+│   │   └── mail_app/           # profile.yaml, parent.yaml, synthesis.yaml, agents/
+│   ├── pages/                  # Streamlit multi-page UI components
+│   ├── demo.py                 # CLI entry point
+│   ├── ui.py                   # Streamlit web UI entry point
+│   ├── langgraph_app.py        # LangGraph Studio entry point
+│   └── requirements.txt
+├── LLM_assisted_Triage/        # Research paper (LaTeX, IEEEtran)
+│   ├── main.tex
+│   ├── fig_architecture.tex
+│   ├── references.bib
+│   └── PAPER_UPDATE_PLAN.md
+├── demo-targets/
+│   └── mail-app/               # Docker Compose mail server (AWS EC2)
+├── AGENTS.md                   # Task tracker — read this first
+├── Literature_Review_Summary.md
+└── Summary-SP2026-Kalhar.md    # Architecture design doc + paper summaries
 ```
 
 ## Quick Start
 
 ### Prerequisites
 - Python 3.11+
-- Docker (for demo)
+- Docker (for voting_app demo)
 - OpenRouter API key
 
 ### Installation
@@ -36,24 +50,29 @@ cp .env.example .env
 # Edit .env and add your OPENROUTER_API_KEY
 ```
 
-### Run Demo
+### Run CLI Demo
 
 ```bash
-python demo.py
+python demo.py --profile voting_app --incident "Redis is down"
+# Target a specific service manually:
+python demo.py --profile voting_app --incident "Redis is down" --service redis
 ```
 
-The demo investigates the example voting app (5 microservices: vote, worker, redis, db, result).
-
-### Configuration
-
-All behavior is controlled via `.env`:
+### Run Web UI
 
 ```bash
-LLM_MODEL=openai/gpt-4.1           # Model to use
-MAX_ITERATIONS=10                   # Max tool calls per agent
-MAX_CONCURRENCY=10                  # Parallel specialist nodes
-DOCKER_EXEC_TIMEOUT=10              # Command timeout (seconds)
-DOCKER_LOGS_TAIL=200                # Lines of docker logs to fetch
+streamlit run ui.py
+```
+
+### Environment Variables
+
+```bash
+LLM_MODEL=openai/gpt-4.1       # Model to use (via OpenRouter)
+MAX_ITERATIONS=10               # Max tool calls per specialist agent
+MAX_CONCURRENCY=10              # Parallel specialist nodes
+DOCKER_EXEC_TIMEOUT=30         # Command timeout (seconds)
+DOCKER_LOGS_TAIL=200           # Lines of docker logs to fetch
+LOG_COMMAND_OUTPUTS=false      # Log all command outputs to rca_commands.log
 ```
 
 ## Architecture
@@ -61,85 +80,60 @@ DOCKER_LOGS_TAIL=200                # Lines of docker logs to fetch
 ### Graph Flow
 
 ```
-START → planning (parent LLM) → [Send fan-out] → specialist nodes → END
+START → parent_agent → [Send() fan-out] → specialist nodes (parallel)
+                                                    ↓
+                                              synthesis
+                                                    ↓
+                       parent_agent ←─────────────┘   (loop, max N cycles)
+                            ↓
+                          END  →  Final RCA Report
 ```
 
-- **Parent Agent**: Reads incident + service config, produces subtasks
-- **Specialist Agents**: Self-register via `graph/registry.py`, execute in parallel
-- **LangGraph**: Dynamic dispatch based on `Subtask.assigned_agent`
+- **Parent Agent** (`core/agents/parent_agent.py`): LLM orchestrator with two tools: `create_subtasks` (fans out to specialists) and `write_rca_conclusion` (ends the loop). Hard-wires conclusion at `MAX_CYCLES` (default 3).
+- **Specialist Agents** (`core/agents/specialists/`): ReAct agents with a single `run_command` tool. Narrow domain scope. Registered via `core/graph/registry.py`.
+- **Synthesis Agent** (`core/agents/synthesis_agent.py`): Tool-free, reads new `SpecialistFinding` objects via `findings_offset`, produces `CycleSummary` for the parent's next cycle.
+- **LangGraph State** (`core/graph/state.py`): `GraphState` TypedDict with `Annotated[list, operator.add]` reducers for parallel fan-in merge.
 
-### Adding a New Specialist
+## Profile System
 
-1. Create `agents/specialists/my_agent.py`:
-```python
-from agents.specialists.base_specialist import BaseSpecialist
-from graph.registry import register, SpecialistRegistration
+Each deployment target lives in `profiles/<name>/`:
 
-class MyAgent(BaseSpecialist):
-    @property
-    def agent_type(self) -> str:
-        return "my_agent"
-    
-    @property
-    def prompt_file(self) -> str:
-        return "my_system.txt"
-    
-    @property
-    def context_commands(self) -> list[str]:
-        return ["ls /app", "ps aux"]
-
-def my_agent_node(state: dict) -> dict:
-    finding = MyAgent().run_docker(...)
-    return {"current_cycle_findings": [finding]}
-
-register(SpecialistRegistration(
-    agent_type="my_agent",
-    description="Investigates X by doing Y",
-    node_name="my_agent_node",
-    node_fn=my_agent_node,
-))
+```
+profiles/voting_app/
+  profile.yaml        # product metadata, access_method, services list
+  parent.yaml         # parent agent system prompt
+  synthesis.yaml      # synthesis agent system prompt
+  agents/
+    log.yaml          # log specialist config
+    runtime_status.yaml
+    network.yaml
+    docker_specs.yaml
 ```
 
-2. Import in `demo.py`:
-```python
-import agents.specialists.my_agent  # noqa: F401
-```
+`profile.yaml` service entries define `expected_behavior`, `known_failures`, `context_commands`, and `log_hints`. Agent YAML files define `agent_type`, `system_prompt`, `when_to_use`, `do_not_use`, `context_commands`, and `gather_docker_host_context`.
 
-Done. The parent LLM now sees "my_agent" as an option and can assign subtasks to it.
+## Adding a New Specialist
 
-## Service Configuration
+**Option A — Python (full control):**
+1. Create `core/agents/specialists/my_agent.py` extending `BaseSpecialist`
+2. Call `register(SpecialistRegistration(...))` at the bottom of the file
+3. Import it in `demo.py` — it auto-registers into the graph
 
-Services are defined in `configs/voting_app.yaml`:
-
-```yaml
-services:
-  - service_name: vote
-    container: example-voting-app-vote-1
-    expected_behavior: |
-      Serves HTTP on port 80, connects to Redis
-    known_failures:
-      - pattern: "ConnectionError: Error -2"
-        likely_cause: "Redis is down"
-    context_commands:
-      - "cat /proc/1/environ | tr '\\0' '\\n' | grep REDIS"
-      - "cat /usr/local/app/app.py"
-    log_hints:
-      - "Application stdout is provided as docker logs"
-      - "Look for ConnectionError in the logs"
-```
-
-The parent LLM reads this to decide which services to investigate. Specialists receive `context_commands` and `log_hints` to guide their investigation.
+**Option B — YAML only (no Python required):**
+1. Create `profiles/<name>/agents/my_agent.yaml` with `agent_type`, `system_prompt`, `when_to_use`, `do_not_use`
+2. The `YAMLSpecialist` bridge class picks it up at startup automatically
 
 ## Security
 
-- **Command Allowlist**: `security/allowlist.py` blocks write operations, redirects, network tools
-- **Output Redaction**: `security/redactor.py` strips AWS keys, private keys, emails, IPs
-- **Timeouts**: All commands timeout after `DOCKER_EXEC_TIMEOUT` seconds
-- **Output Caps**: stdout/stderr truncated at `MAX_OUTPUT_BYTES`
+- **Command Allowlist** (`core/security/allowlist.py`): Deny-first. Blocks `rm`, `chmod`, `curl`, `wget`, `nc`, shell redirects, `| bash`. Only explicitly allowed prefixes (log readers, system status utilities, service CLIs) proceed.
+- **Output Redactor** (`core/security/redactor.py`): Strips AWS keys, PEM blocks, bearer tokens, `api_key=`/`password=` assignments, email addresses, full IPv4 addresses, long base64 strings. Runs on every execution path before output reaches the LLM.
 
-## Research
+## Research Paper
 
-See `paper/` for the full research paper on LLM-assisted incident triage.
+See `LLM_assisted_Triage/` for the IEEE conference paper draft.
+Current state: Introduction, Related Work, and full Methodology section complete. Abstract and keywords written. Experiments and Conclusion sections pending experiment runs.
+
+Track all task status in `AGENTS.md`.
 
 ## License
 

@@ -36,6 +36,23 @@ class SSHExecutor:
             if exit_code != 0 and not out.strip():
                 return f"STDERR: {err.strip()}"
             return out
+        except EOFError:
+            # Stale pooled connection — evict and retry once with a fresh client
+            key = (ssh_config.host, ssh_config.port, ssh_config.username)
+            self._pool.pop(key, None)
+            try:
+                client = self._get_or_create_client(ssh_config)
+                stdin, stdout, stderr = client.exec_command(
+                    command, timeout=ssh_config.timeout
+                )
+                out = stdout.read(max_output_bytes).decode("utf-8", errors="replace")
+                err = stderr.read(stderr_max_bytes).decode("utf-8", errors="replace")
+                exit_code = stdout.channel.recv_exit_status()
+                if exit_code != 0 and not out.strip():
+                    return f"STDERR: {err.strip()}"
+                return out
+            except (paramiko.SSHException, OSError, EOFError) as exc:
+                raise SSHExecutionError(str(exc), command, ssh_config.host) from exc
         except (paramiko.SSHException, OSError) as exc:
             raise SSHExecutionError(str(exc), command, ssh_config.host) from exc
 

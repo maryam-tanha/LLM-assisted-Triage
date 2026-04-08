@@ -126,7 +126,7 @@ def build_graph(product_config: ProductConfig):
             subtasks = state["subtasks"]
             print(f"\n  Parent agent (manual mode): using pre-set subtasks, starting cycle 1.")
             for st in subtasks:
-                print(f"    [{st.subtask_id}] {st.service_name} ({st.container}) → agent: {st.assigned_agent}")
+                print(f"    [{st.subtask_id}] {st.service_name} ({st.container}) -> agent: {st.assigned_agent}")
                 print(f"      Task : {st.description}")
                 print(f"      Why  : {st.hypothesis}")
             return {"parent_decision": "investigate", "current_cycle": 1}
@@ -156,7 +156,7 @@ def build_graph(product_config: ProductConfig):
             subtasks = update.get("subtasks", [])
             print(f"  Parent decided: investigate with {len(subtasks)} subtask(s).")
             for st in subtasks:
-                print(f"    [{st.subtask_id}] {st.service_name} ({st.container}) → agent: {st.assigned_agent}")
+                print(f"    [{st.subtask_id}] {st.service_name} ({st.container}) -> agent: {st.assigned_agent}")
                 print(f"      Task : {st.description}")
                 print(f"      Why  : {st.hypothesis}")
         elif decision == "conclude":
@@ -167,12 +167,12 @@ def build_graph(product_config: ProductConfig):
     def synthesis_node(state: GraphState) -> dict:
         return run_synthesis_agent(state, system_prompt=product_config.synthesis_prompt)
 
-    # ── Routing: parent → specialists (fan-out) or END ───────────────────────
+    # ── Routing: parent -> specialists (fan-out) or END ───────────────────────
     def route_parent(state: GraphState) -> list[Send] | str:
         """
         Route based on parent_decision:
-          - "conclude" → END
-          - "investigate" → Send fan-out to assigned specialist nodes
+          - "conclude" -> END
+          - "investigate" -> Send fan-out to assigned specialist nodes
         """
         if state.get("parent_decision") == "conclude":
             return END

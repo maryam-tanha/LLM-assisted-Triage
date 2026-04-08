@@ -50,10 +50,11 @@ def _build_user_message(
     )
 
 
-def _parse_synthesis(text: str) -> tuple[list[str], list[str], str]:
-    """Extract SUMMARY, KEY_FINDINGS, RECOMMENDATIONS from synthesis output."""
+def _parse_synthesis(text: str) -> tuple[list[str], list[str], list[str], str]:
+    """Extract SUMMARY, KEY_FINDINGS, HYPOTHESIS_STATUS, RECOMMENDATIONS from synthesis output."""
     key_findings: list[str] = []
     recommendations: list[str] = []
+    hypothesis_status: list[str] = []
     summary = text  # fallback: use full text as summary
 
     kf_match = re.search(r"KEY_FINDINGS:\s*\n((?:\s*-[^\n]*\n?)+)", text)
@@ -61,6 +62,14 @@ def _parse_synthesis(text: str) -> tuple[list[str], list[str], str]:
         key_findings = [
             line.strip().lstrip("- ")
             for line in kf_match.group(1).splitlines()
+            if line.strip().startswith("-")
+        ]
+
+    hs_match = re.search(r"HYPOTHESIS_STATUS:\s*\n((?:\s*-[^\n]*\n?)+)", text)
+    if hs_match:
+        hypothesis_status = [
+            line.strip().lstrip("- ")
+            for line in hs_match.group(1).splitlines()
             if line.strip().startswith("-")
         ]
 
@@ -73,12 +82,12 @@ def _parse_synthesis(text: str) -> tuple[list[str], list[str], str]:
         ]
 
     summary_match = re.search(
-        r"SUMMARY:\s*\n([\s\S]+?)(?:\nKEY_FINDINGS:|\nRECOMMENDATIONS:|\Z)", text
+        r"SUMMARY:\s*\n([\s\S]+?)(?:\nKEY_FINDINGS:|\nHYPOTHESIS_STATUS:|\nRECOMMENDATIONS:|\Z)", text
     )
     if summary_match:
         summary = summary_match.group(1).strip()
 
-    return key_findings, recommendations, summary
+    return key_findings, recommendations, hypothesis_status, summary
 
 
 def _update_history(current: str, cycle_num: int, synthesis_text: str) -> str:
@@ -130,7 +139,7 @@ def run_synthesis_agent(state: dict, system_prompt: str = "") -> dict:
         )
     )
 
-    key_findings, recommendations, summary = _parse_synthesis(synthesis_text)
+    key_findings, recommendations, hypothesis_status, summary = _parse_synthesis(synthesis_text)
     specialist_types = list({f.agent_type for f in new_findings})
 
     cycle_summary = CycleSummary(
@@ -138,6 +147,7 @@ def run_synthesis_agent(state: dict, system_prompt: str = "") -> dict:
         summary=summary,
         key_findings=key_findings,
         recommendations=recommendations,
+        hypothesis_status=hypothesis_status,
         specialist_types=specialist_types,
         timestamp=datetime.now(timezone.utc),
     )

@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from langchain_core.messages import AIMessage
 
-from core.agents.specialists.log_agent import LogAgent, log_specialist_node
-from framework.models import SSHConfig
+from core.agents.specialists.yaml_specialist import YAMLSpecialist
+from framework.models import AgentConfig, SSHConfig
 from core.graph.state import SpecialistFinding
 from core.security.allowlist import CommandAllowlist
 from core.security.redactor import Redactor
@@ -25,7 +25,16 @@ def ssh_config():
 
 @pytest.fixture
 def log_agent():
-    return LogAgent()
+    cfg = AgentConfig(
+        agent_type="log",
+        description="Investigates container logs.",
+        context_commands=[
+            "journalctl -n 100 --no-pager",
+            "dmesg | tail -50",
+            "tail -n 200 /var/log/syslog",
+        ],
+    )
+    return YAMLSpecialist(cfg)
 
 
 def _make_finding(**kwargs) -> SpecialistFinding:
@@ -184,16 +193,13 @@ class TestSSHConfig:
 
 
 # ---------------------------------------------------------------------------
-# TestLogAgent
+# TestLogAgent (via YAMLSpecialist)
 # ---------------------------------------------------------------------------
 
 
 class TestLogAgent:
     def test_agent_type(self, log_agent):
         assert log_agent.agent_type == "log"
-
-    def test_prompt_file(self, log_agent):
-        assert log_agent.prompt_file == "log_system.txt"
 
     def test_context_commands_not_empty(self, log_agent):
         assert len(log_agent.context_commands) > 0
@@ -245,7 +251,6 @@ class TestLogAgent:
         mock_executor.execute.return_value = "log data"
         mock_executor_cls.return_value = mock_executor
 
-        # create_agent's invoke returns messages; one has tool_calls, last is final answer
         messages_with_tool_call = [
             AIMessage(
                 content="",
@@ -261,10 +266,8 @@ class TestLogAgent:
 
         finding = log_agent.run("task-002", "Investigate errors", ssh_config, {})
 
-        # Dangerous command is tracked in commands_run
         assert "rm -rf /var/log/app.log" in finding.commands_run
 
-        # SSH execute must NOT have been called with the dangerous command (allowlist blocks it)
         for call_args in mock_executor.execute.call_args_list:
             assert "rm -rf" not in call_args[0][1]
 
@@ -277,7 +280,6 @@ class TestLogAgent:
         mock_executor.execute.return_value = "some output"
         mock_executor_cls.return_value = mock_executor
 
-        # Simulate 10 tool-call turns then final answer (recursion_limit caps the loop)
         tool_call_msg = AIMessage(
             content="",
             tool_calls=[{"id": "tc0", "name": "run_command", "args": {"command": "journalctl -n 10"}}],
@@ -301,7 +303,6 @@ class TestLogAgent:
         self, mock_create_agent, mock_executor_cls, log_agent, ssh_config
     ):
         mock_executor = MagicMock()
-        # First 3 calls = context commands (succeed), 4th = tool loop command (fails)
         mock_executor.execute.side_effect = [
             "context output 1",
             "context output 2",
@@ -333,49 +334,3 @@ class TestLogAgent:
         assert finding.findings == malformed
         assert finding.evidence == []
         assert finding.commands_run == ["journalctl -n 10"]
-
-
-# ---------------------------------------------------------------------------
-# TestLogSpecialistNode
-# ---------------------------------------------------------------------------
-
-
-class TestLogSpecialistNode:
-    @patch("core.agents.specialists.log_agent.LogAgent.run_docker")
-    def test_node_returns_reducer_compatible_dict(self, mock_run_docker):
-        mock_run_docker.return_value = _make_finding()
-
-        state = {
-            "subtask_id": "task-001",
-            "subtask_description": "Check logs for crash",
-            "container": "example-voting-app-vote-1",
-            "service_context": {"service": "payments"},
-        }
-
-        result = log_specialist_node(state)
-
-        assert "current_cycle_findings" in result
-        assert isinstance(result["current_cycle_findings"], list)
-        assert len(result["current_cycle_findings"]) == 1
-        assert result["current_cycle_findings"][0].agent_type == "log"
-
-    @patch("core.agents.specialists.log_agent.LogAgent.run_docker")
-    def test_node_passes_correct_arguments(self, mock_run_docker):
-        mock_run_docker.return_value = _make_finding(subtask_id="t1")
-
-        state = {
-            "subtask_id": "t1",
-            "subtask_description": "Investigate OOM",
-            "container": "example-voting-app-worker-1",
-            "service_context": {"expected_behavior": "runs continuously"},
-        }
-
-        log_specialist_node(state)
-
-        mock_run_docker.assert_called_once_with(
-            subtask_id="t1",
-            subtask_description="Investigate OOM",
-            container="example-voting-app-worker-1",
-            service_context={"expected_behavior": "runs continuously"},
-            system_prompt="",
-        )

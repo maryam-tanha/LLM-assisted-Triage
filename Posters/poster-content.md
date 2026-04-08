@@ -1,4 +1,4 @@
-# Poster Content — LLM-Assisted Triage
+# Poster Content - LLM-Assisted Triage
 
 > Matches the Northeastern / Khoury College poster template exactly.
 > Left column: Introduction → Objective → Methodology
@@ -24,26 +24,26 @@
 ├──────────────┴──┬─────────────────────┴────────────┬────────────────────────────────────┤
 │                 │                                  │                                    │
 │  Introduction   │    [FIGURE 1: Architecture       │  Results                           │
-│                 │     Diagram — LangGraph           │                                    │
-│  (6 bullets,    │     multi-agent flow]            │  (EXP-06 metrics table,            │
-│   ~150 words)   │                                  │   Locust findings,                 │
-│                 │    [FIGURE 2: Experiment          │   experiment suite table)          │
-│                 │     Results — Pie/Bar Charts]    │                                    │
+│                 │     Diagram - LangGraph           │                                    │
+│  (prose,        │     multi-agent flow]            │  (all 6 experiments summary,       │
+│   ~48 words)    │                                  │   accuracy + cost metrics,         │
+│                 │    [FIGURE 2: Experiment          │   ~62 words)                       │
+│                 │     Results Table]               │                                    │
 ├─────────────────┤                                  ├────────────────────────────────────┤
 │                 │                                  │                                    │
 │  Objective      │    [FIGURE 3: Fault Injection    │  Analysis                          │
 │                 │     Pipeline Diagram]            │                                    │
-│  (1 paragraph,  │                                  │  (8 bullets,                       │
-│   ~100 words)   │    [FIGURE 4: Demo Target        │   ~150 words)                      │
+│  (1 paragraph,  │                                  │  (prose,                           │
+│   ~41 words)    │    [FIGURE 4: Demo Target        │   ~57 words)                       │
 │                 │     Topology Diagrams]           │                                    │
 ├─────────────────┤                                  ├────────────────────────────────────┤
 │                 │                                  │                                    │
-│  Methodology    │    [FIGURE 5: EXP-06 Evidence    │  Conclusion                        │
+│  Methodology    │    [FIGURE 5: EXP-01 Evidence    │  Conclusion                        │
 │                 │     Log Panel / Code Block]      │                                    │
-│  (5 structured  │                                  │  (contributions + future work,     │
-│   bullets,      │    [FIGURE 6: Metric Callout     │   ~150 words)                      │
-│   ~200 words)   │     Cards: 136.5s, $0.49,       │                                    │
-│                 │     4 cycles]                    │  [Optional: concluding figure]     │
+│  (5 bullets,    │                                  │  (contributions + future work,     │
+│   ~78 words)    │    [FIGURE 6: Metric Callout     │   ~106 words)                      │
+│                 │     Cards: 6/6, 89s, $0.27,     │                                    │
+│                 │     2.2 cycles]                  │  [Optional: concluding figure]     │
 │                 │                                  │                                    │
 ├─────────────────┴──────────────────────────────────┴────────────────────────────────────┤
 │                                                                                         │
@@ -76,20 +76,19 @@ Automated fault diagnosis for microservice systems using LLM-powered specialist 
 
 ### Introduction
 
-This research addresses the challenge of automated Root Cause Analysis (RCA) in cloud-native microservice environments. Modern distributed systems comprise dozens of interdependent services where a single fault can cascade across the entire stack. Incident investigation requires SREs to correlate logs, process states, and configurations across containers — a slow, expert-dependent process that drives high Mean Time to Resolution (MTTR). Large Language Models (LLMs) demonstrate strong reasoning over unstructured operational data, yet existing approaches are limited to single-agent architectures lacking parallel investigation and iterative refinement. This study presents a multi-agent framework that addresses these gaps by combining parallel specialist dispatch, multi-cycle reasoning, and security-constrained live container introspection.
+Modern distributed systems make incident diagnosis slow and expert-dependent. This study presents a multi-agent RCA framework using LLMs to autonomously investigate microservice faults by correlating container logs, process states, and configurations in parallel across services, reducing manual SRE triage and cutting Mean Time to Resolution.
 
 ### Objective
 
-This research aims to design, implement, and validate a multi-agent RCA framework that autonomously investigates microservice incidents. The specific objectives are to: (1) enable parallel investigation of multiple services using self-registering specialist agents, (2) support iterative multi-cycle reasoning where insufficient evidence triggers additional investigation rounds, (3) produce structured, evidence-backed RCA reports with calibrated confidence scores, (4) enforce security via deny-first command allowlisting and credential redaction, and (5) validate against real fault-injected deployments with known ground truth.
+To design, implement, and validate a multi-agent RCA framework that autonomously investigates microservice incidents via parallel specialist dispatch, iterative multi-cycle reasoning, and security-constrained container introspection, producing structured, evidence-backed RCA reports validated against real fault-injected deployments.
 
 ### Methodology
 
-- This study employed a **systems design and empirical validation** approach to investigate LLM-driven automated incident root cause analysis in microservice environments.
-- The framework was implemented using **LangGraph** with a cyclic multi-agent graph: Parent Agent (LLM orchestrator) → parallel specialist fan-out via Send API → Synthesis Agent → iterative loop or conclusion.
-- Four **specialist agent types** were developed: Log Agent (log analysis), Runtime Status Agent (resource metrics), Docker Specs Agent (container config), and Network Agent (connectivity) — each self-registering at runtime.
-- Validation data was collected through **controlled fault injection experiments** (6 designed, 1 confirmed) on two live environments: a 5-service Voting App (Docker Compose) and a 4-service Mail App (AWS EC2).
-- **Load generation** used Locust with WebMailUser, SMTPUser, and IMAPUser task classes to simulate realistic traffic during fault conditions.
-- Methodological rigor was ensured through **ground-truth comparison** — each experiment injects a known fault, and the agent's identified root cause is compared against the injected configuration change.
+- This study employed a **systems design and empirical validation** approach to investigate LLM-driven automated incident RCA in microservice environments.
+- The framework was implemented using **LangGraph**: Parent Agent (LLM orchestrator) → parallel specialist fan-out via Send API → Synthesis Agent → iterative loop or conclusion.
+- Four **specialist agent types** were developed (Log, Runtime Status, Docker Specs, and Network), each self-registering at runtime with no code changes per deployment.
+- **Controlled fault injection** experiments (6 designed, 6 completed) were run on a 4-service Mail App deployed on AWS EC2, covering database, web server, mail transport, DNS, and OS-level memory faults.
+- **Ground-truth validation** compared the agent's identified root cause against each injected configuration change per experiment.
 
 ---
 
@@ -97,15 +96,17 @@ This research aims to design, implement, and validate a multi-agent RCA framewor
 
 ### Results
 
-The framework was validated on EXP-06: Dovecot IMAP connection limit exhaustion (`mail_max_userip_connections=1`). The agent correctly identified the root cause in **4 cycles, 136.5 seconds, at ~$0.49 cost** (GPT-4.1 via OpenRouter), deploying 4 of 6 available specialists. Evidence cited included exact Dovecot log entries showing repeated IMAP login rejections. Locust confirmed 29 IMAP failures with `[UNAVAILABLE] Maximum connections exceeded`, 3 session aborts, and correlated `ConnectionResetError` events. The agent recommended increasing the limit to 3-5 and implementing connection utilization alerts. Five additional experiments (full crash, DB outage, Redis OOM, message size limit, web UI crash) are designed and pending execution.
+All six fault injection experiments were run end-to-end on the Mail App (AWS EC2). The agent correctly identified the root cause in every case: **6/6 accuracy, averaging 2.2 cycles, 89 seconds, and $0.27 per run** (GPT-4.1). The fastest diagnosis was EXP-04 (Postfix rate limit, 1 cycle, 45s, $0.04); the hardest was EXP-05 (DNS corruption, 3 cycles, 155s, $0.58) where symptoms appeared one layer removed from the actual fault. Single-cycle solves occurred when logs contained unambiguous error codes (EXP-02, EXP-04).
 
 ### Analysis
 
-The EXP-06 result demonstrates the framework can diagnose **partial degradation** faults — where IMAP fails while SMTP and webmail remain functional — a class of incident where overall health metrics appear normal, making it particularly challenging for human operators. The 4-cycle iterative approach was critical: Cycle 1 identified connection errors, while subsequent cycles narrowed to the exact Dovecot configuration parameter through synthesis-guided refinement. Parallel fan-out replaced the sequential context-switching required by single-agent or manual approaches. The deny-first security layer blocked zero legitimate commands while preventing all write and network operations. At $0.49 per run, the cost profile supports production deployment where reduced MTTR value far exceeds API cost. These findings align with and extend prior work (RCACopilot, FLASH, OpenRCA) by adding parallel execution and iterative reasoning.
+The experiments span five fault domains and two failure modes: total outage (EXP-02, EXP-03) and partial degradation (EXP-01, EXP-04, EXP-05, EXP-06). Partial degradation faults were harder and required more cycles on average. The iterative loop proved critical for EXP-05 (DNS): cycle 1 found symptoms in Postfix logs, but two more rounds were needed to trace them to a corrupted `/etc/resolv.conf`. At $0.04-$0.58 per run, the cost supports production use where reduced MTTR outweighs API spend.
 
 ### Conclusion
 
-This research presents a multi-agent RCA framework that autonomously investigates microservice incidents through parallel specialist dispatch, iterative multi-cycle reasoning, and security-constrained live container introspection. The framework successfully identified an injected Dovecot connection limit fault in 136.5 seconds at $0.49, validating that LLM-assisted triage is viable for real-world incident response. Key contributions include: a LangGraph-based dynamic fan-out architecture, cycle-based investigation with synthesis-driven refinement, a deny-first security layer for safe LLM container access, and YAML-driven profiles for code-free deployment to new environments. Future work includes running all six experiments to benchmark accuracy, comparing MTTR against manual baselines, extending to Kubernetes, and adding human-in-the-loop approval for high-risk commands.
+Across six fault injection experiments spanning five infrastructure domains, the framework achieved 100% root cause accuracy at $0.27 and 89 seconds per incident on average. Key contributions: LangGraph dynamic fan-out for parallel specialist dispatch, synthesis-driven iterative reasoning, a deny-first security layer, and YAML-driven profiles for code-free onboarding.
+
+Cost stayed below $0.60 even in the worst case (3-cycle DNS fault), making the approach practical for production SRE workflows. Future work targets Kubernetes-native execution, human-in-the-loop command approval, and evaluation on incidents without pre-defined ground truth.
 
 ---
 
@@ -113,12 +114,13 @@ This research presents a multi-agent RCA framework that autonomously investigate
 
 ### Key Sources & Acknowledgements
 
-**Sources:**
-1. Chen et al., "RCACopilot: LLM-Aided Root Cause Analysis," ICSE 2024
-2. Yang et al., "FLASH: Fast Log Anomaly Detection," ASE 2023
-3. Wang et al., "OpenRCA: RCA via Knowledge Graphs + LLMs," ISSRE 2024
-4. Hong et al., "MetaGPT: Multi-Agent Collaboration," ICLR 2024
-5. LangGraph Documentation, LangChain Inc., 2024-2025
+**Sources (20 references — sorted by citation length, 7 columns × 3 rows):**
+
+| Col 1 (longest) | Col 2 | Col 3 | Col 4 | Col 5 | Col 6 | Col 7 (shortest) |
+|---|---|---|---|---|---|---|
+| Szandala — "AIOps for Reliability," ICCS 2025 | Kholkar & Ahuja — "Guardrail Policy-as-Prompt," arXiv 2025 | Huang et al. — "Resilience of Multi-Agent," arXiv 2024 | Zhang et al. — "AgentOrchestra," arXiv 2025 | Yu et al. — "Triangle," FSE 2025 | Xu et al. — "OpenRCA," ICLR 2025 | Hong et al. — "MetaGPT," ICLR 2023 |
+| Salman et al. — "HyLift 5G/6G," Computers 2025 | Ashraf & Talavera — "Autonomous Agents in SE," 2025 | Zhang et al. — "AIOps Survey," ACM Comp. Surveys 2025 | Liao et al. — "SageCopilot," IEEE TSC 2025 | Zhou et al. — "D-Bot," arXiv 2023 | Xu et al. — "DivLog," ICSE 2024 | Li et al. — "LACP," arXiv 2025 |
+| Fu et al. — "MARCA," Complex & Intell. Sys. 2026 | AWS Blog — "SRE Assistants + MCP," 2025 | Bai et al. — "AOI Framework," arXiv 2025 | Chen et al. — "RCACopilot," EuroSys 2024 | Yue et al. — "MasRouter," arXiv 2025 | Zhang et al. — "FLASH," MS Research 2024 | |
 
 **Acknowledgements:**
 Prof. Maryam Tanha (Advisor), Northeastern University, Khoury College of Computer Sciences. Dr. Dawood Sajjadi (Consultant), Director of SRE, Fortinet. Infrastructure supported by OpenRouter API and AWS EC2.
@@ -165,14 +167,15 @@ Prof. Maryam Tanha (Advisor), Northeastern University, Khoury College of Compute
 
 ### Figure 2: Experiment Results Table (centre, as chart/table)
 
-| ID     | Injected Fault              | Impact                   | Status        |
-|--------|-----------------------------|--------------------------|---------------|
-| EXP-01 | Full mailserver crash       | SMTP/IMAP/Web down       | Designed      |
-| EXP-02 | PostgreSQL outage           | Roundcube total failure   | Designed      |
-| EXP-03 | Redis OOM (1MB limit)       | Silent session eviction   | Designed      |
-| EXP-04 | Postfix msg size (1KB)      | All sends fail            | Designed      |
-| EXP-05 | Roundcube crash             | Web UI only              | Designed      |
-| EXP-06 | Dovecot conn limit=1        | IMAP partial degradation | **Confirmed** |
+| ID     | Injected Fault              | Domain       | Cycles | Time   | Cost   | Result    |
+|--------|-----------------------------|--------------|--------|--------|--------|-----------|
+| EXP-01 | Dovecot conn limit=1        | Mail (IMAP)  | 4      | 136.5s | $0.49  | Correct   |
+| EXP-02 | PostgreSQL max_connections=4 | Database     | 1      | ~30s   | $0.03  | Correct   |
+| EXP-03 | PHP memory_limit=10M        | Web server   | 2      | 74.8s  | $0.14  | Correct   |
+| EXP-04 | Postfix rate limit=1        | Mail (SMTP)  | 1      | 44.9s  | $0.04  | Correct   |
+| EXP-05 | Corrupt /etc/resolv.conf    | DNS          | 3      | 155.2s | $0.58  | Correct   |
+| EXP-06 | Container memory=48MB (OOM) | OS / Memory  | 2      | 95.3s  | $0.32  | Correct   |
+|        |                             | **Average**  | **2.2**| **89s**|**$0.27**| **6/6** |
 
 ### Figure 3: Fault Injection Pipeline (centre, horizontal flow)
 
@@ -208,11 +211,11 @@ Prof. Maryam Tanha (Advisor), Northeastern University, Khoury College of Compute
              (PostgreSQL)           (session cache)
 ```
 
-### Figure 5: EXP-06 Evidence Log Panel (centre, styled code block)
+### Figure 5: EXP-01 Evidence Log Panel (centre, styled code block)
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│  LOCUST FAULT OBSERVATION — EXP-06                                      │
+│  LOCUST FAULT OBSERVATION - EXP-01                                      │
 │                                                                         │
 │  29  IMAP  error('[UNAVAILABLE] Maximum number of connections           │
 │       from user+IP exceeded (mail_max_userip_connections=1)')           │
@@ -228,12 +231,12 @@ Prof. Maryam Tanha (Advisor), Northeastern University, Khoury College of Compute
 ### Figure 6: Metric Callout Cards (centre bottom)
 
 ```
-┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐
-│                  │   │                  │   │                  │
-│     136.5s       │   │      $0.49       │   │    4 cycles      │
-│                  │   │                  │   │                  │
-│   end-to-end     │   │    per run       │   │   to diagnose    │
-│   investigation  │   │   (GPT-4.1)     │   │   root cause     │
-│                  │   │                  │   │                  │
-└──────────────────┘   └──────────────────┘   └──────────────────┘
+┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐
+│                  │   │                  │   │                  │   │                  │
+│      6 / 6       │   │      89s avg     │   │     $0.27 avg    │   │   2.2 cycles     │
+│                  │   │                  │   │                  │   │                  │
+│   root causes    │   │   end-to-end     │   │    per run       │   │   avg to         │
+│   identified     │   │   diagnosis      │   │   (GPT-4.1)     │   │   diagnose       │
+│                  │   │                  │   │                  │   │                  │
+└──────────────────┘   └──────────────────┘   └──────────────────┘   └──────────────────┘
 ```

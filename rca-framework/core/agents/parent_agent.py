@@ -126,10 +126,13 @@ def _build_user_message(
             f"      - pattern: {kf.pattern}\n        likely_cause: {kf.likely_cause}"
             for kf in svc.known_failures
         )
+        deps = svc.additional_info.get("dependencies", []) if svc.additional_info else []
+        deps_line = f"  dependencies: {deps}\n" if deps else ""
         services_block.append(
             f"  service_name: {svc.service_name}\n"
             f"  container: {svc.container}\n"
             f"  description: {svc.description.strip()}\n"
+            f"{deps_line}"
             f"  expected_behavior: {svc.expected_behavior.strip()}\n"
             f"  known_failures:\n{failures}"
         )
@@ -144,6 +147,12 @@ def _build_user_message(
             f"{cs.summary}\n\n"
             f"Key Findings:\n"
             + "\n".join(f"  - {kf}" for kf in cs.key_findings)
+            + (
+                "\n\nHypothesis Status:\n"
+                + "\n".join(f"  - {h}" for h in cs.hypothesis_status)
+                if cs.hypothesis_status
+                else ""
+            )
             + (
                 "\n\nRecommendations from synthesis:\n"
                 + "\n".join(f"  - {r}" for r in cs.recommendations)

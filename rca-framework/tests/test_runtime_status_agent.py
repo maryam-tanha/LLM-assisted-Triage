@@ -2,8 +2,7 @@
 Tests for:
   - AgentConfig model and parent_llm_description()
   - load_profile loading agent YAML files
-  - RuntimeStatusAgent basic properties
-  - runtime_status_specialist_node LangGraph interface
+  - RuntimeStatus specialist via YAMLSpecialist
 """
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,10 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from core.agents.specialists.runtime_status_agent import (
-    RuntimeStatusAgent,
-    runtime_status_specialist_node,
-)
+from core.agents.specialists.yaml_specialist import YAMLSpecialist
 from framework.loader import load_profile
 from framework.models import AgentConfig
 from core.graph.state import SpecialistFinding
@@ -40,6 +36,25 @@ def _make_finding(**kwargs) -> SpecialistFinding:
     )
     defaults.update(kwargs)
     return SpecialistFinding(**defaults)
+
+
+@pytest.fixture
+def runtime_status_agent():
+    cfg = AgentConfig(
+        agent_type="runtime_status",
+        description="Checks container runtime health.",
+        context_commands=[
+            "df -h",
+            "free -m",
+            "top -bn1",
+            "ps aux",
+            "uptime",
+            "cat /proc/meminfo",
+            "cat /proc/1/status",
+            "cat /proc/1/limits",
+        ],
+    )
+    return YAMLSpecialist(cfg)
 
 
 # ---------------------------------------------------------------------------
@@ -160,86 +175,18 @@ class TestLoadProfileAgents:
 
 
 # ---------------------------------------------------------------------------
-# TestRuntimeStatusAgent
+# TestRuntimeStatusAgent (via YAMLSpecialist)
 # ---------------------------------------------------------------------------
 
 
 class TestRuntimeStatusAgent:
-    def setup_method(self):
-        self.agent = RuntimeStatusAgent()
+    def test_agent_type(self, runtime_status_agent):
+        assert runtime_status_agent.agent_type == "runtime_status"
 
-    def test_agent_type(self):
-        assert self.agent.agent_type == "runtime_status"
+    def test_context_commands_not_empty(self, runtime_status_agent):
+        assert len(runtime_status_agent.context_commands) > 0
 
-    def test_prompt_file(self):
-        assert self.agent.prompt_file == "runtime_status_system.txt"
-
-    def test_context_commands_not_empty(self):
-        assert len(self.agent.context_commands) > 0
-
-    def test_fallback_context_commands_all_allowed(self):
-        for cmd in self.agent.context_commands:
+    def test_fallback_context_commands_all_allowed(self, runtime_status_agent):
+        for cmd in runtime_status_agent.context_commands:
             allowed, reason = CommandAllowlist.is_allowed(cmd)
-            assert allowed, f"Fallback command blocked: {cmd!r} — {reason}"
-
-
-# ---------------------------------------------------------------------------
-# TestRuntimeStatusSpecialistNode
-# ---------------------------------------------------------------------------
-
-
-class TestRuntimeStatusSpecialistNode:
-    @patch("core.agents.specialists.runtime_status_agent.RuntimeStatusAgent.run_docker")
-    def test_node_returns_reducer_compatible_dict(self, mock_run_docker):
-        mock_run_docker.return_value = _make_finding()
-
-        state = {
-            "subtask_id": "task-001",
-            "subtask_description": "Check memory and disk",
-            "container": "example-voting-app-redis-1",
-            "service_context": {},
-        }
-
-        result = runtime_status_specialist_node(state)
-
-        assert "current_cycle_findings" in result
-        assert isinstance(result["current_cycle_findings"], list)
-        assert len(result["current_cycle_findings"]) == 1
-        assert result["current_cycle_findings"][0].agent_type == "runtime_status"
-
-    @patch("core.agents.specialists.runtime_status_agent.RuntimeStatusAgent.run_docker")
-    def test_node_passes_correct_arguments(self, mock_run_docker):
-        mock_run_docker.return_value = _make_finding(subtask_id="t2")
-
-        state = {
-            "subtask_id": "t2",
-            "subtask_description": "Check for OOM risk",
-            "container": "example-voting-app-worker-1",
-            "service_context": {"expected_behavior": "runs continuously"},
-        }
-
-        runtime_status_specialist_node(state)
-
-        mock_run_docker.assert_called_once_with(
-            subtask_id="t2",
-            subtask_description="Check for OOM risk",
-            container="example-voting-app-worker-1",
-            service_context={"expected_behavior": "runs continuously"},
-            system_prompt="",
-        )
-
-    @patch("core.agents.specialists.runtime_status_agent.RuntimeStatusAgent.run_docker")
-    def test_node_uses_empty_service_context_when_missing(self, mock_run_docker):
-        mock_run_docker.return_value = _make_finding()
-
-        state = {
-            "subtask_id": "t3",
-            "subtask_description": "Disk check",
-            "container": "example-voting-app-db-1",
-            # no service_context key
-        }
-
-        runtime_status_specialist_node(state)
-
-        _, kwargs = mock_run_docker.call_args
-        assert kwargs["service_context"] == {}
+            assert allowed, f"Fallback command blocked: {cmd!r} -- {reason}"

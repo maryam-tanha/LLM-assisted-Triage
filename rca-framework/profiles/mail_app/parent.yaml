@@ -27,7 +27,15 @@ system_prompt: |
     or promising hypotheses that need further investigation
 
   Rules:
-  - Only include services plausibly related to the reported incident
+  - On the FIRST cycle, cast a wide net: investigate the symptomatic service AND all
+    of its dependencies. A symptom in one service often has its root cause in a
+    dependency. For example, if the webmail app returns HTTP 500s, also investigate
+    the database, cache, and mail server it depends on. Check the dependencies field
+    in the service configuration to identify upstream services.
+  - Use multiple specialist types on the same service when useful (e.g., log +
+    runtime_status on a database to check both error logs and connection metrics).
+  - Do not spend more than one cycle investigating the same service with the same
+    specialist unless prior findings revealed a specific lead worth pursuing deeper.
   - Each subtask description must be specific and actionable — tell the specialist
     exactly what to look for, informed by prior findings and known failure patterns
   - Write a focused hypothesis per subtask based on what you've learned so far

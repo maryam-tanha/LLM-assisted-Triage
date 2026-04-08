@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Incident Response: Manual vs. LLM-Assisted</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: #ffffff;
+    display: flex;
+    justify-content: center;
+    padding: 32px 16px;
+  }
+
+  .diagram {
+    width: 960px;
+    background: #fff;
+  }
+
+  /* ── Title ── */
+  .diagram-title {
+    text-align: center;
+    margin-bottom: 28px;
+  }
+  .diagram-title h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #1a1a2e;
+    letter-spacing: -0.3px;
+  }
+  .diagram-title p {
+    font-size: 13px;
+    color: #6b7280;
+    font-style: italic;
+    margin-top: 4px;
+  }
+
+  /* ── Columns ── */
+  .columns {
+    display: grid;
+    grid-template-columns: 1fr 80px 1fr;
+    gap: 0;
+  }
+
+  .column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* ── Column Headers ── */
+  .col-header {
+    width: 100%;
+    padding: 14px 20px;
+    border-radius: 10px 10px 0 0;
+    text-align: center;
+    margin-bottom: 0;
+  }
+  .col-header.manual {
+    background: linear-gradient(135deg, #3B4252, #4C566A);
+  }
+  .col-header.automated {
+    background: linear-gradient(135deg, #1E40AF, #2563EB);
+  }
+  .col-header h2 {
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .col-header p {
+    font-size: 11px;
+    color: rgba(255,255,255,0.7);
+    margin-top: 2px;
+  }
+
+  /* ── Track (vertical line container) ── */
+  .track {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0 12px;
+    position: relative;
+  }
+
+  /* ── Step Boxes ── */
+  .step {
+    width: 100%;
+    max-width: 380px;
+    border-radius: 8px;
+    padding: 14px 16px;
+    position: relative;
+    border-left: 4px solid;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  }
+
+  .step-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .step-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1a1a2e;
+    margin-bottom: 3px;
+  }
+  .step-desc {
+    font-size: 11px;
+    color: #6b7280;
+    line-height: 1.4;
+  }
+  .step-time {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #6b7280;
+    background: rgba(0,0,0,0.04);
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+
+  /* ── Manual step colors (warm) ── */
+  .step.m-alert    { border-color: #DC2626; background: #FEF2F2; }
+  .step.m-alert .step-label { color: #DC2626; }
+
+  .step.m-context  { border-color: #D97706; background: #FFFBEB; }
+  .step.m-context .step-label { color: #D97706; }
+
+  .step.m-ssh      { border-color: #D97706; background: #FEF3C7; }
+  .step.m-ssh .step-label { color: #D97706; }
+
+  .step.m-hypo     { border-color: #EA580C; background: #FFF7ED; }
+  .step.m-hypo .step-label { color: #EA580C; }
+
+  .step.m-pivot    { border-color: #DC2626; background: #FEF2F2; }
+  .step.m-pivot .step-label { color: #DC2626; }
+
+  .step.m-resolve  { border-color: #16A34A; background: #F0FDF4; }
+  .step.m-resolve .step-label { color: #16A34A; }
+
+  /* ── Automated step colors (cool) ── */
+  .step.a-alert    { border-color: #2563EB; background: #EFF6FF; }
+  .step.a-alert .step-label { color: #2563EB; }
+
+  .step.a-plan     { border-color: #1D4ED8; background: #DBEAFE; }
+  .step.a-plan .step-label { color: #1D4ED8; }
+
+  .step.a-parallel { border-color: #4F46E5; background: #EEF2FF; }
+  .step.a-parallel .step-label { color: #4F46E5; }
+
+  .step.a-synth    { border-color: #7C3AED; background: #F5F3FF; }
+  .step.a-synth .step-label { color: #7C3AED; }
+
+  .step.a-converge { border-color: #2563EB; background: #EFF6FF; }
+  .step.a-converge .step-label { color: #2563EB; }
+
+  .step.a-report   { border-color: #16A34A; background: #F0FDF4; }
+  .step.a-report .step-label { color: #16A34A; }
+
+  /* ── Parallel agents row ── */
+  .agents-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+    justify-content: center;
+  }
+  .agent-chip {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 6px;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .agent-chip.log     { background: #2563EB; }
+  .agent-chip.runtime { background: #059669; }
+  .agent-chip.network { background: #D97706; }
+  .agent-chip.db      { background: #7C3AED; }
+
+  /* ── Arrows (connector between steps) ── */
+  .arrow {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 32px;
+    position: relative;
+  }
+  .arrow::after {
+    content: '';
+    width: 2px;
+    height: 100%;
+    background: #D1D5DB;
+  }
+  .arrow-head {
+    width: 0; height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid #D1D5DB;
+    position: absolute;
+    bottom: 0;
+  }
+
+  .arrow.blue::after { background: #93C5FD; }
+  .arrow.blue .arrow-head { border-top-color: #93C5FD; }
+
+  /* ── Loop arrow (manual side) ── */
+  .loop-label {
+    position: relative;
+    width: 100%;
+    max-width: 380px;
+    height: 0;
+  }
+  .loop-annotation {
+    position: absolute;
+    left: -44px;
+    top: -200px;
+    height: 210px;
+    width: 40px;
+    border: 2px dashed #D1D5DB;
+    border-right: none;
+    border-radius: 20px 0 0 20px;
+    display: flex;
+    align-items: center;
+  }
+  .loop-annotation span {
+    position: absolute;
+    left: -8px;
+    top: 50%;
+    transform: translateY(-50%) rotate(-90deg);
+    font-size: 10px;
+    font-style: italic;
+    color: #9CA3AF;
+    white-space: nowrap;
+    font-weight: 500;
+  }
+  .loop-arrow-head {
+    position: absolute;
+    left: 28px;
+    top: -4px;
+    width: 0; height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 6px solid #D1D5DB;
+  }
+
+  /* ── Optional cycle (right side) ── */
+  .optional-loop {
+    position: absolute;
+    right: -44px;
+    top: -160px;
+    height: 170px;
+    width: 40px;
+    border: 2px dashed #93C5FD;
+    border-left: none;
+    border-radius: 0 20px 20px 0;
+  }
+  .optional-loop span {
+    position: absolute;
+    right: -10px;
+    top: 50%;
+    transform: translateY(-50%) rotate(90deg);
+    font-size: 10px;
+    font-style: italic;
+    color: #93C5FD;
+    white-space: nowrap;
+    font-weight: 500;
+  }
+  .optional-loop-arrow {
+    position: absolute;
+    right: 28px;
+    top: -4px;
+    width: 0; height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 6px solid #93C5FD;
+  }
+
+  /* ── Center divider ── */
+  .center-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  .center-col::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: repeating-linear-gradient(to bottom, #E5E7EB 0px, #E5E7EB 6px, transparent 6px, transparent 12px);
+  }
+
+  .center-badge {
+    background: #fff;
+    border: 1px solid #E5E7EB;
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #6B7280;
+    z-index: 1;
+    white-space: nowrap;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  }
+
+  /* ── Bottom bars ── */
+  .bottom-bar {
+    width: 100%;
+    max-width: 380px;
+    margin-top: 16px;
+    text-align: center;
+  }
+  .mttr-bar {
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .mttr-bar.slow {
+    background: linear-gradient(90deg, #FCA5A5, #FDE68A);
+    color: #92400E;
+  }
+  .mttr-bar.fast {
+    background: linear-gradient(90deg, #6EE7B7, #34D399);
+    color: #064E3B;
+  }
+  .stats {
+    font-size: 10px;
+    color: #9CA3AF;
+    margin-top: 8px;
+    letter-spacing: 0.2px;
+  }
+
+  /* ── Center bottom ── */
+  .faster-badge {
+    background: linear-gradient(135deg, #059669, #10B981);
+    color: #fff;
+    font-size: 20px;
+    font-weight: 800;
+    padding: 10px 24px;
+    border-radius: 12px;
+    z-index: 2;
+    box-shadow: 0 4px 14px rgba(16,185,129,0.35);
+    letter-spacing: -0.5px;
+  }
+
+  /* ── Center badges positioning ── */
+  .center-items {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    height: 100%;
+    padding: 60px 0 0 0;
+    gap: 0;
+    position: relative;
+  }
+
+  .center-spacer { flex: 1; }
+</style>
+</head>
+<body>
+
+<div class="diagram">
+  <div class="diagram-title">
+    <h1>Incident Response: Manual vs. LLM-Assisted</h1>
+    <p>Comparative workflow for a P1 service degradation incident</p>
+  </div>
+
+  <div class="columns">
+    <!-- ════════════ LEFT COLUMN ════════════ -->
+    <div class="column">
+      <div class="col-header manual">
+        <h2>Manual SRE Triage</h2>
+        <p>Typical P1 incident flow</p>
+      </div>
+      <div class="track">
+        <!-- Step 1 -->
+        <div class="arrow" style="height:16px"><div class="arrow-head"></div></div>
+        <div class="step m-alert">
+          <div class="step-label">ALERT</div>
+          <div class="step-title">PagerDuty Alert Fires</div>
+          <div class="step-desc">SRE paged at 3:14 AM</div>
+          <div class="step-time">T+0 min</div>
+        </div>
+
+        <div class="arrow"><div class="arrow-head"></div></div>
+
+        <!-- Step 2 -->
+        <div class="step m-context">
+          <div class="step-label">CONTEXT GATHER</div>
+          <div class="step-title">Read Slack / Check Dashboard</div>
+          <div class="step-desc">Scan Grafana, open 4 browser tabs</div>
+          <div class="step-time">T+8 min</div>
+        </div>
+
+        <div class="arrow"><div class="arrow-head"></div></div>
+
+        <!-- Step 3 -->
+        <div class="step m-ssh" id="m-ssh">
+          <div class="step-label">SSH &amp; INVESTIGATE</div>
+          <div class="step-title">SSH into servers, grep logs</div>
+          <div class="step-desc">Manually inspect 3 services, run ad-hoc commands</div>
+          <div class="step-time">T+22 min</div>
+        </div>
+
+        <div class="arrow"><div class="arrow-head"></div></div>
+
+        <!-- Step 4 -->
+        <div class="step m-hypo">
+          <div class="step-label">HYPOTHESIS</div>
+          <div class="step-title">Form initial hypothesis</div>
+          <div class="step-desc">Discuss in Slack thread, share snippets</div>
+          <div class="step-time">T+35 min</div>
+        </div>
+
+        <div class="arrow"><div class="arrow-head"></div></div>
+
+        <!-- Step 5 -->
+        <div class="step m-pivot">
+          <div class="step-label">VERIFY &amp; PIVOT</div>
+          <div class="step-title">Wrong hypothesis — pivot</div>
+          <div class="step-desc">Re-investigate different service</div>
+          <div class="step-time">T+52 min</div>
+        </div>
+
+        <!-- Loop annotation -->
+        <div class="loop-label">
+          <div class="loop-annotation">
+            <span>Iterate (retry)</span>
+            <div class="loop-arrow-head"></div>
+          </div>
+        </div>
+
+        <div class="arrow"><div class="arrow-head"></div></div>
+
+        <!-- Step 6 -->
+        <div class="step m-resolve">
+          <div class="step-label">RESOLUTION</div>
+          <div class="step-title">Root cause identified</div>
+          <div class="step-desc">Write incident report manually</div>
+          <div class="step-time">T+74 min</div>
+        </div>
+
+        <div class="bottom-bar">
+          <div class="mttr-bar slow">~74 minutes average MTTR</div>
+          <div class="stats">5 context switches · 3 tools · 1 engineer · serial execution</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════ CENTER ════════════ -->
+    <div class="center-col">
+      <div class="center-items">
+        <div class="center-spacer"></div>
+        <div class="center-badge">Serial ↔ Parallel</div>
+        <div class="center-spacer"></div>
+        <div class="center-spacer"></div>
+        <div class="center-badge">Ad-hoc ↔ Structured</div>
+        <div class="center-spacer"></div>
+        <div class="center-spacer"></div>
+        <div class="faster-badge">16× faster</div>
+      </div>
+    </div>
+
+    <!-- ════════════ RIGHT COLUMN ════════════ -->
+    <div class="column">
+      <div class="col-header automated">
+        <h2>LLM-Assisted Triage (Our Framework)</h2>
+        <p>Same P1 incident, automated</p>
+      </div>
+      <div class="track">
+        <!-- Step 1 -->
+        <div class="arrow blue" style="height:16px"><div class="arrow-head"></div></div>
+        <div class="step a-alert">
+          <div class="step-label">ALERT</div>
+          <div class="step-title">Alert Ingested Automatically</div>
+          <div class="step-desc">Incident ticket parsed, profile loaded</div>
+          <div class="step-time">T+0 min</div>
+        </div>
+
+        <div class="arrow blue"><div class="arrow-head"></div></div>
+
+        <!-- Step 2 -->
+        <div class="step a-plan">
+          <div class="step-label">PARENT AGENT PLANS</div>
+          <div class="step-title">Parent Agent creates subtasks</div>
+          <div class="step-desc">LLM analyzes incident context, selects relevant specialists</div>
+          <div class="step-time">T+0.5 min</div>
+        </div>
+
+        <div class="arrow blue"><div class="arrow-head"></div></div>
+
+        <!-- Step 3 — Parallel -->
+        <div class="step a-parallel" id="a-parallel">
+          <div class="step-label">PARALLEL INVESTIGATION ⚡</div>
+          <div class="step-title">Parallel Specialist Execution</div>
+          <div class="agents-row">
+            <span class="agent-chip log">Log Agent</span>
+            <span class="agent-chip runtime">Runtime Agent</span>
+            <span class="agent-chip network">Network Agent</span>
+            <span class="agent-chip db">DB Agent</span>
+          </div>
+          <div class="step-desc" style="margin-top:8px; text-align:center;">All specialists execute simultaneously via <code>Send()</code> fan-out</div>
+          <div class="step-time">T+2 min</div>
+        </div>
+
+        <div class="arrow blue"><div class="arrow-head"></div></div>
+
+        <!-- Step 4 -->
+        <div class="step a-synth">
+          <div class="step-label">SYNTHESIS</div>
+          <div class="step-title">Synthesis Agent consolidates</div>
+          <div class="step-desc">Cross-domain causal chain analysis</div>
+          <div class="step-time">T+3 min</div>
+        </div>
+
+        <div class="arrow blue"><div class="arrow-head"></div></div>
+
+        <!-- Step 5 -->
+        <div class="step a-converge" style="position:relative;">
+          <div class="step-label">CONVERGENCE CHECK</div>
+          <div class="step-title">Parent evaluates completeness</div>
+          <div class="step-desc">Sufficient evidence → conclude (or loop once more)</div>
+          <div class="step-time">T+3.5 min</div>
+          <!-- Optional loop -->
+          <div class="optional-loop">
+            <span>Optional cycle 2</span>
+            <div class="optional-loop-arrow"></div>
+          </div>
+        </div>
+
+        <div class="arrow blue"><div class="arrow-head"></div></div>
+
+        <!-- Step 6 -->
+        <div class="step a-report">
+          <div class="step-label">STRUCTURED REPORT</div>
+          <div class="step-title">Structured RCA Report Generated</div>
+          <div class="step-desc">Root cause, evidence chain, contributing factors, remediation steps</div>
+          <div class="step-time">T+4.5 min</div>
+        </div>
+
+        <div class="bottom-bar">
+          <div class="mttr-bar fast">~4.5 minutes average MTTR</div>
+          <div class="stats">0 context switches · 4 parallel agents · 0 engineers · parallel execution</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>
