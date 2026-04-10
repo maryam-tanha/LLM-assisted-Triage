@@ -29,8 +29,10 @@ v1/
 ├── Posters/                    # Conference poster (PDF)
 ├── demo-targets/
 │   └── mail-app/               # Docker Compose mail server (AWS EC2)
-├── docs/research-notes/        # Literature review + architecture notes
-├── papers/                     # Reference papers (20 PDFs)
+├── docs/
+│   ├── research-notes/         # Literature review + architecture notes
+│   ├── papers/                 # Reference papers (20 PDFs)
+│   └── papers_text/            # Plain-text extractions of reference papers
 └── AGENTS.md                   # Task tracker
 ```
 
