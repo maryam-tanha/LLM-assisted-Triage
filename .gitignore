@@ -71,3 +71,6 @@ htmlcov/
 # Poster design iterations
 Posters/stitch/
 *.zip
+
+# Runtime logs
+rca-framework/logs/
