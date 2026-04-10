@@ -67,3 +67,7 @@ htmlcov/
 # Office
 ~$*.docx
 ~$*.xlsx
+
+# Poster design iterations
+Posters/stitch/
+*.zip

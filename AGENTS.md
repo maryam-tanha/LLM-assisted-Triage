@@ -2,7 +2,7 @@
 
 This file tracks all major work streams, tasks, and their current status across the project.
 
-**Updated:** 2026-04-07
+**Updated:** 2026-04-09
 
 ---
 
@@ -82,19 +82,12 @@ This file tracks all major work streams, tasks, and their current status across 
 
 | Task | Status | Notes |
 |------|--------|-------|
-| EXP-01: Dovecot IMAP connection limit exhaustion | ✅ Done | Agent correct — 4 cycles, 136s, ~$0.49 |
-| EXP-02: PostgreSQL max connections exhaustion | ✅ Done | Agent correct — 1 cycle, ~30s, ~$0.027 |
-| EXP-03: PHP memory limit too low | ✅ Done | Agent correct — 2 cycles, 75s, ~$0.14 |
-| EXP-04: Postfix per-client send rate limit | ✅ Done | Agent correct — 1 cycle, 45s, ~$0.04 |
-| EXP-05: DNS resolver corruption in mailserver | ✅ Done | Agent correct — 3 cycles, 155s, ~$0.58 |
-| EXP-06: Container hard memory limit (OOM) | ✅ Done | Agent correct — 2 cycles, 95s, ~$0.32 |
-| Run EXP-01 end-to-end (inject → Locust → agent → restore) | ✅ | |
-| Run EXP-02 end-to-end | ✅ | |
-| Run EXP-03 end-to-end | ✅ | |
-| Run EXP-04 end-to-end | ✅ | |
-| Run EXP-05 end-to-end | ✅ | |
-| Run EXP-06 end-to-end | ✅ | |
-| Document agent outputs and RCA accuracy per experiment | ✅ | Results documented in EXPERIMENTS.md |
+| EXP-01: Dovecot IMAP connection limit exhaustion | ✅ | 4 cycles, 136s, ~$0.49 — correct |
+| EXP-02: PostgreSQL max connections exhaustion | ✅ | 1 cycle, ~30s, ~$0.027 — correct |
+| EXP-03: PHP memory limit too low | ✅ | 2 cycles, 75s, ~$0.14 — correct |
+| EXP-04: Postfix per-client send rate limit | ✅ | 1 cycle, 45s, ~$0.04 — correct |
+| EXP-05: DNS resolver corruption in mailserver | ✅ | 3 cycles, 155s, ~$0.58 — correct |
+| EXP-06: Container hard memory limit (OOM) | ✅ | 2 cycles, 95s, ~$0.32 — correct |
 
 ---
 
@@ -113,8 +106,8 @@ This file tracks all major work streams, tasks, and their current status across 
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Literature review (20 papers) | ✅ | Summarised in `Literature_Review_Summary.md` |
-| Architecture design doc | ✅ | `Summary-SP2026-Kalhar.md` |
+| Literature review (20 papers) | ✅ | `docs/research-notes/Literature_Review_Summary.md` |
+| Architecture design doc | ✅ | `docs/research-notes/Summary-SP2026-Kalhar.md` |
 | LaTeX paper — Abstract + Keywords | ✅ | Written 2026-04-04 |
 | LaTeX paper — Introduction | ✅ | No changes needed, already accurate |
 | LaTeX paper — Related Work | ✅ | No changes needed, already accurate |
@@ -126,15 +119,9 @@ This file tracks all major work streams, tasks, and their current status across 
 | LaTeX paper — Methodology §III.6 Security Model | ✅ | No changes needed, already accurate |
 | Architecture figure (`LLM_assisted_Triage/fig_architecture.tex`) | ✅ | Evaluator node, PASS node, FAIL arrow removed; conclusion routes directly to Final RCA Report; profile directory label added |
 | Humanization pass on paper | ✅ | AI markers removed, em dashes replaced, voice consistent with original sections |
-| Experimental results section | ⬜ | Depends on completing experiments (Section IV left empty intentionally) |
-| Conclusion section | ⬜ | Left empty intentionally — to be written after experiments |
+| Experimental results section (§IV) | ⬜ | All 6 experiments complete — section needs write-up |
+| Conclusion section | ⬜ | To write after results section |
 | Evaluation metrics defined | ⬜ | Precision/recall of root cause identification |
-
-### Paper Location
-- `LLM_assisted_Triage/main.tex` — main paper (IEEEtran)
-- `LLM_assisted_Triage/fig_architecture.tex` — TikZ architecture figure
-- `LLM_assisted_Triage/references.bib` — bibliography (20 entries)
-- `LLM_assisted_Triage/PAPER_UPDATE_PLAN.md` — detailed plan used for this update session
 
 ---
 
@@ -144,5 +131,5 @@ This file tracks all major work streams, tasks, and their current status across 
 |------|--------|-------|
 | AWS EC2 mail server provisioned | ✅ | `ubuntu@16.174.20.34` |
 | GitHub repo connected on server | ✅ | `~/LLM-assisted-Triage`, deploy key configured |
-| SSH access documented in memory | ✅ | `ubuntu@16.174.20.34`, key at `P:\LLM-RCA-Reasearch\Keys\mail-server-kalhar-laptop.pem` |
+| SSH access documented in memory | ✅ | Key path in Claude memory |
 | `.gitignore` for runtime mail config files | ⬜ | `config/ssl/`, `postfix-accounts.cf`, `dovecot-quotas.cf` |

@@ -1,10 +1,11 @@
+import logging
 import os
 import re
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-import logging
 
 from dotenv import load_dotenv
 from langchain.agents import create_agent
@@ -21,7 +22,7 @@ from core.security.redactor import Redactor
 from core.tools.docker_tool import DockerExecutor
 from core.tools.ssh_tool import SSHExecutionError, SSHExecutor
 
-# Ensure this logger writes to a separate file and doesn't pollute the main log
+logger = logging.getLogger("SpecialistAgent")
 cmd_logger = logging.getLogger("CommandOutput")
 if not cmd_logger.handlers:
     cmd_handler = logging.FileHandler("rca_commands.log")
@@ -44,17 +45,11 @@ class BaseSpecialist(ABC):
 
     Subclasses must define agent_type and context_commands.
     The system_prompt is injected at call time from the profile YAML.
-    The prompt_file property is kept for backward compatibility with tests.
     """
 
     @property
     @abstractmethod
     def agent_type(self) -> str: ...
-
-    @property
-    def prompt_file(self) -> str:
-        """Deprecated: kept for backward compatibility. Prompt now comes from YAML."""
-        return ""
 
     @property
     @abstractmethod
@@ -71,7 +66,7 @@ class BaseSpecialist(ABC):
         executor = SSHExecutor()
         redactor = Redactor()
         try:
-            resolved_prompt = system_prompt or self._load_prompt_fallback()
+            resolved_prompt = system_prompt
             commands = service_context.get("context_commands") or self.context_commands
             context_output = self._run_context_commands(ssh_config, executor, commands)
 
@@ -115,7 +110,7 @@ class BaseSpecialist(ABC):
     ) -> SpecialistFinding:
         """Run the specialist against a local Docker container instead of SSH."""
         executor = DockerExecutor()
-        resolved_prompt = system_prompt or self._load_prompt_fallback()
+        resolved_prompt = system_prompt
         # Prefer service-level context_commands from the YAML over the agent's
         # generic defaults (which are designed for bare-metal/VM hosts).
         commands = service_context.get("context_commands") or self.context_commands
@@ -143,23 +138,6 @@ class BaseSpecialist(ABC):
 
         final_text, commands_run = self._run_tool_loop(messages, execute_command)
         return self._parse_finding(final_text, subtask_id, commands_run)
-
-    def _load_prompt_fallback(self) -> str:
-        """Fallback prompt loader for backward compatibility when system_prompt is not injected.
-
-        Attempts to load from the old config/prompts/ path. If not found, returns empty string.
-        """
-        if not self.prompt_file:
-            return ""
-        prompt_path = (
-            Path(__file__).parent.parent.parent.parent
-            / "config"
-            / "prompts"
-            / self.prompt_file
-        )
-        if prompt_path.exists():
-            return prompt_path.read_text(encoding="utf-8")
-        return ""
 
     def _run_context_commands(
         self, ssh_config: SSHConfig, executor: SSHExecutor, commands: list[str] | None = None
@@ -206,10 +184,6 @@ class BaseSpecialist(ABC):
         """Run the specialist as a ReAct agent via create_agent (model + run_command tool)."""
         system_prompt = messages[0].content if messages else ""
         user_message = messages[1] if len(messages) > 1 else HumanMessage(content="")
-
-        import logging
-        import time
-        logger = logging.getLogger("SpecialistAgent")
 
         @tool
         def run_command(command: str) -> str:

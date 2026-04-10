@@ -1,3 +1,5 @@
+import logging
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -7,6 +9,8 @@ from framework.llm import get_llm
 from framework.models import ProductConfig
 from framework import usage_tracker
 from core.graph.state import CycleSummary, Subtask
+
+logger = logging.getLogger("ParentAgent")
 
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
@@ -250,13 +254,9 @@ def run_parent_agent(
                 )
             )
         )
-    import time
     t0 = time.time()
     response = llm_with_tools.invoke(messages)
     duration = time.time() - t0
-    
-    import logging
-    logger = logging.getLogger("ParentAgent")
     logger.info(f"Parent LLM planning completed in {duration:.2f}s")
 
     um = getattr(response, "usage_metadata", None)
