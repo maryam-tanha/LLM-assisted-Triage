@@ -6,6 +6,27 @@
 
 Multi-agent RCA framework that uses LLM-powered specialist agents to autonomously diagnose microservice faults by correlating container logs, process states, and configurations in parallel — reducing manual SRE triage and cutting Mean Time to Resolution.
 
+## Table of Contents
+
+- [Project Structure](#project-structure)
+- [Quick Start](#quick-start)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Run an Investigation (CLI)](#run-an-investigation-cli)
+  - [Run the Web UI](#run-the-web-ui)
+  - [Environment Variables](#environment-variables)
+- [Architecture](#architecture)
+  - [Investigation Flow](#investigation-flow)
+  - [Key Files](#key-files)
+- [Creating a Profile](#creating-a-profile)
+- [Understanding the Execution](#understanding-the-execution)
+  - [CLI Output](#cli-output)
+  - [Log Files](#log-files)
+  - [Web UI Details](#web-ui-details)
+- [Security](#security)
+- [Research Paper](#research-paper)
+- [License](#license)
+
 ## Project Structure
 
 ```
