@@ -23,27 +23,27 @@
 │              │                        │  Fortinet                Computer Sciences       │
 ├──────────────┴──┬─────────────────────┴────────────┬────────────────────────────────────┤
 │                 │                                  │                                    │
-│  Introduction   │    [FIGURE 1: Architecture       │  Results                           │
+│  Introduction   │    [FIGURE 1: Architecture       │  Results & Analysis (top)          │
 │                 │     Diagram - LangGraph           │                                    │
-│  (prose,        │     multi-agent flow]            │  (all 6 experiments summary,       │
-│   ~48 words)    │                                  │   accuracy + cost metrics,         │
-│                 │    [FIGURE 2: Experiment          │   ~62 words)                       │
+│  (prose,        │     multi-agent flow]            │  (5 bullets, merged results        │
+│   ~48 words)    │                                  │   + analysis, ~120 words)          │
+│                 │    [FIGURE 2: Experiment          │                                    │
 │                 │     Results Table]               │                                    │
 ├─────────────────┤                                  ├────────────────────────────────────┤
 │                 │                                  │                                    │
-│  Objective      │    [FIGURE 3: Fault Injection    │  Analysis                          │
+│  Objective      │    [FIGURE 3: Fault Injection    │  Results & Analysis                │
 │                 │     Pipeline Diagram]            │                                    │
-│  (1 paragraph,  │                                  │  (prose,                           │
-│   ~41 words)    │    [FIGURE 4: Demo Target        │   ~57 words)                       │
+│  (3 bullets,    │                                  │  (5 bullets,                       │
+│   ~55 words)    │    [FIGURE 4: Demo Target        │   ~120 words)                      │
 │                 │     Topology Diagrams]           │                                    │
 ├─────────────────┤                                  ├────────────────────────────────────┤
 │                 │                                  │                                    │
-│  Methodology    │    [FIGURE 5: EXP-01 Evidence    │  Conclusion                        │
+│  Methodology    │    [FIGURE 5: EXP-01 Evidence    │  Conclusion & Future Work          │
 │                 │     Log Panel / Code Block]      │                                    │
-│  (5 bullets,    │                                  │  (contributions + future work,     │
-│   ~78 words)    │    [FIGURE 6: Metric Callout     │   ~106 words)                      │
+│  (5 bullets,    │                                  │  (contributions + next steps,      │
+│   ~78 words)    │    [FIGURE 6: Metric Callout     │   7 bullets, ~100 words)           │
 │                 │     Cards: 6/6, 89s, $0.27,     │                                    │
-│                 │     2.2 cycles]                  │  [Optional: concluding figure]     │
+│                 │     2.2 cycles]                  │                                    │
 │                 │                                  │                                    │
 ├─────────────────┴──────────────────────────────────┴────────────────────────────────────┤
 │                                                                                         │
@@ -80,7 +80,8 @@ Modern distributed systems make incident diagnosis slow and expert-dependent. Th
 
 ### Objective
 
-To design, implement, and validate a multi-agent RCA framework that autonomously investigates microservice incidents via parallel specialist dispatch, iterative multi-cycle reasoning, and security-constrained container introspection, producing structured, evidence-backed RCA reports validated against real fault-injected deployments.
+- Design a multi-agent system that can diagnose microservice incidents on its own - spinning up specialists in parallel, reasoning over multiple cycles, and staying within safe execution boundaries.
+- Put it to the test on real fault-injected deployments and measure whether it finds the right root cause.
 
 ### Methodology
 
@@ -94,19 +95,26 @@ To design, implement, and validate a multi-agent RCA framework that autonomously
 
 ## RIGHT COLUMN
 
-### Results
+### Results & Analysis
 
-All six fault injection experiments were run end-to-end on the Mail App (AWS EC2). The agent correctly identified the root cause in every case: **6/6 accuracy, averaging 2.2 cycles, 89 seconds, and $0.27 per run** (GPT-4.1). The fastest diagnosis was EXP-04 (Postfix rate limit, 1 cycle, 45s, $0.04); the hardest was EXP-05 (DNS corruption, 3 cycles, 155s, $0.58) where symptoms appeared one layer removed from the actual fault. Single-cycle solves occurred when logs contained unambiguous error codes (EXP-02, EXP-04).
+- The agent correctly identified the root cause in all six experiments: **6/6 accuracy**, averaging **2.2 cycles**, **89 seconds**, and **$0.27 per run** on GPT-4.1.
+- Simple cases (EXP-02, EXP-04) resolved in a single cycle when logs had clear error codes. EXP-05 (DNS corruption) was the hardest at 3 cycles, 155s, and $0.58, because symptoms appeared one layer away from the actual fault.
+- Five fault domains, two failure modes: total outages (EXP-02, EXP-03) and partial degradation (EXP-01, EXP-04, EXP-05, EXP-06). Degraded-but-running faults consistently needed more investigation cycles.
+- The iterative loop proved critical for indirect faults. In EXP-05, cycle 1 found symptoms in Postfix logs, but two more rounds were needed to trace them to a corrupted `/etc/resolv.conf`.
+- At $0.04 to $0.58 per run, the cost stays well within range for production use where faster diagnosis pays for itself.
 
-### Analysis
+### Conclusion & Future Work
 
-The experiments span five fault domains and two failure modes: total outage (EXP-02, EXP-03) and partial degradation (EXP-01, EXP-04, EXP-05, EXP-06). Partial degradation faults were harder and required more cycles on average. The iterative loop proved critical for EXP-05 (DNS): cycle 1 found symptoms in Postfix logs, but two more rounds were needed to trace them to a corrupted `/etc/resolv.conf`. At $0.04-$0.58 per run, the cost supports production use where reduced MTTR outweighs API spend.
+**What this work contributes:**
+- A LangGraph-based fan-out architecture where the LLM decides which specialists to dispatch in parallel, with no hardcoded pipeline.
+- An iterative reasoning loop: if the first pass is inconclusive, the synthesis agent requests another cycle with targeted follow-up commands.
+- A deny-first security layer that blocks writes, redirects, and network tools during live container introspection.
+- YAML-driven deployment profiles so teams can onboard new services without writing code.
 
-### Conclusion
-
-Across six fault injection experiments spanning five infrastructure domains, the framework achieved 100% root cause accuracy at $0.27 and 89 seconds per incident on average. Key contributions: LangGraph dynamic fan-out for parallel specialist dispatch, synthesis-driven iterative reasoning, a deny-first security layer, and YAML-driven profiles for code-free onboarding.
-
-Cost stayed below $0.60 even in the worst case (3-cycle DNS fault), making the approach practical for production SRE workflows. Future work targets Kubernetes-native execution, human-in-the-loop command approval, and evaluation on incidents without pre-defined ground truth.
+**Where it goes next:**
+- Kubernetes-native execution to move beyond SSH and Docker exec into production clusters.
+- Human-in-the-loop command approval for environments where full autonomy is not yet appropriate.
+- Evaluation on real-world incidents without pre-defined ground truth.
 
 ---
 
