@@ -57,11 +57,10 @@ During a production incident in a cloud-native microservice deployment,
 Site Reliability Engineering teams must SSH into multiple hosts, sift
 through logs, and reconcile metrics across monitoring stacks, all
 under time pressure. Large Language Models can speed up parts of this
-workflow, yet prior work shows they fail at topological reasoning:
-they cannot trace a fault through a service call chain unless the
-dependency graph is handed to them explicitly. We present an
+workflow, yet prior work shows they struggle with root cause analysis even
+when given system topology and telemetry data. We present an
 open-source, hierarchical multi-agent framework built on LangGraph
-that tackles this limitation. A Parent Agent drives iterative
+that addresses this gap through structured decomposition. A Parent Agent drives iterative
 investigation cycles, farming out subtasks to parallel Specialist
 Agents (ReAct-based workers that run read-only commands over
 Docker~exec or SSH) while a Synthesis Agent ties together
@@ -72,7 +71,7 @@ security model (command allowlist plus output redaction) prevents
 agents from modifying infrastructure or leaking credentials.
 All inference is routed through providers that do not train on user
 data, keeping diagnostic telemetry out of model training pipelines.
-We evaluate on a four-service mail application deployed on an Amazon Web Services (AWS) Elastic Compute Cloud (EC2) instance,
+We evaluate on a five-service mail application deployed on an Amazon Web Services (AWS) Elastic Compute Cloud (EC2) instance,
 injecting six faults across six infrastructure domains. The agent
 correctly identifies the root cause in all six cases, averaging
 89~seconds and \$0.27 per investigation on GPT-4.1.
@@ -86,16 +85,27 @@ AIOps, site reliability engineering, LangGraph
 A production incident in a cloud-native microservice architecture puts Site Reliability Engineering (SRE) and DevOps teams
 under immediate pressure: they must Secure Shell (\texttt{SSH}) into multiple hosts, sift through logs, and
 reconcile metrics from different monitoring systems, often in parallel, under time constraints,
-and without a clear picture of what is failing~\cite{zhang2025aiops_survey, chen2024rcacopilot}.
+and without a clear picture of what is failing.
+Recent surveys and industrial experience confirm that this manual
+triage remains laborious and error-prone~\cite{zhang2025aiops_survey, chen2024rcacopilot}.
 Large Language Models (LLMs) have begun to change this picture, but not by replacing the toolchain. Survey evidence
-makes it clear that models must be coupled with existing systems to stay effective, not substituted
-for them~\cite{zhang2025aiops_survey, szandala2025aiops_reliability}. One finding in particular
-shapes our architecture: LLMs reason well about generic failure patterns but consistently fail
-at \emph{topological reasoning}: they cannot trace a fault through a specific service call chain
-unless the dependency graph is given to them explicitly~\cite{xu2025openrca}.
+recommends integrating LLMs with existing toolchains rather than
+building from scratch~\cite{zhang2025aiops_survey}, and reliability
+studies find that models function best as co-pilots alongside human
+SREs, not as autonomous replacements~\cite{szandala2025aiops_reliability}. One finding in particular
+shapes our architecture: even when provided with system topology and
+oracle telemetry, the best-performing LLM solved only 5.37\% of
+root cause analysis tasks in the OpenRCA benchmark~\cite{xu2025openrca},
+indicating that models struggle to reason across complex service
+dependency graphs without substantial structural scaffolding.
 
-We address this with an open-source, hierarchical multi-agent framework that grounds LLM
-reasoning in a YAML service topology and enforces a read-only execution model throughout the
+We address this by combining a declared service topology with
+multi-agent decomposition: rather than asking a single model to
+reason over the entire stack, we break the problem into
+domain-specific subtasks, iterate across investigation cycles, and
+synthesize findings across agents. The framework grounds each
+specialist in a YAML service topology and enforces a read-only
+execution model throughout the
 investigation~\cite{kholkar2025safeops}. Before each specialist begins, the framework pre-fetches container logs and runs
 configured context commands, injecting structured evidence into the agent's opening
 message~\cite{xu2024divlog} rather than forwarding raw streams that would exhaust a
@@ -112,20 +122,26 @@ model to handle everything. AgentOrchestra~\cite{zhang2025agentorchestra} formal
 with the TEA (Tool-Environment-Agent) protocol, where a central planner delegates to
 domain-specific sub-agents; the architecture achieves 89.04\% average across difficulty levels on the General AI Assistants (GAIA) benchmark, well above
 monolithic baselines. MetaGPT~\cite{hong2024metagpt} takes a different angle: it assigns each
-agent a Standard Operating Procedure modeled on real-world software team workflows, which constrains
-output format and reduces coordination errors. Both works converge on the same
+agent a Standardized Operating Procedure (SOP) modeled on real-world
+software team workflows, which constrains output format and reduces
+errors during collaboration. Both works converge on the same
 conclusion: role boundaries matter as much as model capability.
 
 Context management is where many multi-agent IT systems break down.
 An AI-Oriented Operations (AOI) system is proposed in~\cite{bai2025aoi}. It
 compresses intermediate findings before passing them to a high-level observer, retaining 92.8\%
 of critical information at 72.4\% compression, while cutting mean time to resolution by 34.4\%
-over the best prior baseline. Three further systems bear directly on our design. Triangle~\cite{yu2025triangle} demonstrated over 20\% triage
-accuracy improvement (reaching 91.7\% at 5-hop routing) in a production deployment serving
-tens of millions of users. MasRouter~\cite{yue2025masrouter} routes queries to cheaper models
-when complexity permits, reducing HumanEval overhead by up to 52\%. SageCopilot~\cite{liao2025sagecopilot}
-introduced a mandatory output-checking phase before delivery, demonstrating measurable
-quality gains from post-generation validation.
+over the best prior baseline.
+
+Three further systems bear directly on our design. Triangle~\cite{yu2025triangle} demonstrated over 20\% triage
+accuracy improvement (reaching 91.7\% accuracy within five
+reassignment hops) in a production deployment serving tens of
+millions of users. MasRouter~\cite{yue2025masrouter} routes queries to
+appropriately sized models and collaboration configurations when
+complexity permits, reducing HumanEval overhead by up to 52\%. SageCopilot~\cite{liao2025sagecopilot}
+integrates reflective validation and human-in-the-loop feedback,
+demonstrating quality gains from iterative post-generation
+correction.
 
 \subsection{LLM-Based Root Cause Analysis}
 Production deployments reveal a pattern: raw data in, low accuracy out. RCACopilot at
@@ -141,21 +157,22 @@ MA-RCA~\cite{fu2026marca} splits retrieval and validation into distinct agents a
 95.8\% accuracy on the Nezha cloud-native dataset, a result the authors attribute directly
 to eliminating context-switching between hypothesis generation and evidence checking.
 D-Bot~\cite{zhou2023dbot} applies tree-search reasoning using Upper Confidence bound applied to Trees (UCT) scoring to database
-anomalies, forcing the planner to explore multiple diagnostic paths rather than commit to a
-flat task list upfront.
+anomalies, forcing the planner to explore multiple diagnostic paths rather
+than committing to a single chain of actions.
 
 Not every scenario suits the same approach. Hy-LIFT~\cite{salman2025hylift} shows that for
 5G/6G networks, rule-based labeling handles known fault classes well; the LLM layer is reserved
-for novel or ambiguous cases, reaching a macro-F1 of roughly 89--90\%. At the other end,
+for novel or ambiguous cases, reaching a macro-F1 of 0.89. At the other end,
 an Artificial Intelligence for IT Operations (AIOps) reliability study~\cite{szandala2025aiops_reliability} finds that zero-shot LLMs
 misclassify benign traffic spikes as security incidents at a non-trivial rate.
 
 \subsection{Specialist Agent Design and Data Ingestion}
-Ashraf and Talavera~\cite{ashraf2025autonomous} observe that coordination failures
-increase when agents lack clear role separation; conflicting decisions were most frequent
-in tasks where multiple agents operated over the same problem scope.
+Ashraf and Talavera~\cite{ashraf2025autonomous} observe that
+conflicting decisions arise when agent coordination is not
+effectively managed, and that assigning specialized roles leads to
+more comprehensive evaluation.
 
-Narrowing agent scope also changes what data each agent should receive.
+Once agents have clear roles, the next question is what data each one should receive.
 Dumping raw infrastructure logs into an LLM context is a well-documented failure mode: token
 budgets overflow, important lines get truncated, and the model cannot distinguish noise from
 signal. DivLog~\cite{xu2024divlog} addresses template extraction specifically by sampling a
@@ -177,7 +194,6 @@ errors, degrade by 23.7\%.
 On the security side, Kholkar and Ahuja~\cite{kholkar2025safeops} demonstrate a
 ``policy-as-prompt'' pattern that encodes governance rules into runtime classifiers; their
 least-privilege framing directly informs our read-only execution policy.
-Looking ahead to Phase~2, the AWS Model Context Protocol (MCP) architecture~\cite{aws2025mcp_sre} shows how MCP servers let agents discover tools dynamically without bespoke Application Programming Interface (API) wrappers.
 
 
 \section{Methodology}
@@ -284,15 +300,15 @@ A specialist is a LangChain Reasoning + Acting (ReAct) agent with a deliberately
 scope. Its only tool is \texttt{run\_command}; its system prompt
 encodes domain knowledge for one area (logs, runtime resources,
 network connectivity, container configuration, etc.) and nothing else.
-We found that narrowing the prompt sharply reduced
+In our experience, narrowing the prompt sharply reduced
 cross-domain confusions: a log agent that also ``knows about''
-Redis tends to reach for Redis commands at the wrong time~\cite{ashraf2025autonomous}.
+Redis tends to reach for Redis commands at the wrong time.
 
 Before the ReAct loop begins, the framework pre-runs the service's
 \texttt{context\_commands} and, in Docker mode, tails the container
 logs. Both are injected into the agent's opening message, giving it
 a concrete evidence baseline without spending any tool-call budget; log output is structured
-at ingestion using in-context parsing templates~\cite{xu2024divlog}.
+using in-context learning for template extraction~\cite{xu2024divlog}.
 When the per-agent flag \texttt{gather\_docker\_host\_context} is
 set, the framework additionally collects \texttt{docker inspect}
 (full container configuration and state), \texttt{docker stats
@@ -302,7 +318,8 @@ snapshot), and \texttt{docker events} filtered to the preceding
 failures). We added this because application logs alone miss certain
 failure modes entirely; a container killed by the kernel OOM reaper,
 for example, leaves no application-level trace.
-The loop then runs until the agent emits a structured final answer or
+
+Regardless of how evidence is gathered, the loop runs until the agent emits a structured final answer or
 hits \texttt{MAX\_ITERATIONS} (default:~10), at which point a
 low-confidence \texttt{SpecialistFinding} is returned so the cycle
 can continue rather than crash.
@@ -329,7 +346,7 @@ extend coverage without writing Python.
 After each cycle's specialists finish, the Synthesis Agent reads new
 \texttt{SpecialistFinding} objects tracked via a \texttt{findings\_offset} pointer to
 avoid reprocessing prior cycles. Each finding conforms to a fixed typed schema, keeping
-synthesis predictable regardless of compression quality~\cite{bai2025aoi}. The agent
+synthesis predictable. The agent
 produces a \texttt{CycleSummary}: a narrative paragraph,
 \texttt{KEY\_FINDINGS} bullets, and \texttt{RECOMMENDATIONS}. We give
 it no tool access deliberately; its job is cross-domain correlation,
@@ -424,12 +441,12 @@ retention windows and audit-log practices vary across vendors.
 
 \subsection{Experimental Setup}
 
-We evaluated the framework on a four-service mail application
+We evaluated the framework on a five-service mail application
 deployed on an AWS EC2 instance (Ubuntu) via Docker Compose. The
 stack comprises Postfix (Simple Mail Transfer Protocol (SMTP) transport),
 Dovecot (Internet Message Access Protocol (IMAP)), Roundcube
-with Apache and PHP (webmail front-end), and PostgreSQL (session and
-address-book storage). This target was chosen over the simpler voting
+with Apache and PHP (webmail front-end), PostgreSQL (address-book
+and session storage), and Redis (session cache). This target was chosen over the simpler voting
 application used during development because it exercises a wider
 range of infrastructure domains (mail transport, web serving,
 database connectivity, and Domain Name System (DNS) resolution) within a single
@@ -574,16 +591,17 @@ matter of judgment rather than a single misconfigured parameter.
 We presented an open-source, hierarchical multi-agent framework for
 automated root cause analysis in microservice environments. The
 system is built around three ideas that the experiments bear out:
-LLM reasoning is more reliable when grounded in a declared service
-topology than when left to infer structure from raw logs; iterative
+decomposing an investigation into domain-specific agents grounded
+in a declared service topology outperforms asking a single model to
+reason over raw logs; iterative
 cycles with cross-domain synthesis catch faults that a single pass
 misses; and a deny-first security model can keep agents useful
 without giving them the ability to break anything.
 
 The framework's profile system lets operators describe new deployment
 targets entirely in YAML (services, specialist agents, and
-orchestrator prompts) without writing Python. On our four-service
-mail application, six fault injections spanning five infrastructure
+orchestrator prompts) without writing Python. On our five-service
+mail application, six fault injections spanning six infrastructure
 domains were all diagnosed correctly, averaging 89~seconds and
 \$0.27 per run on GPT-4.1. Direct configuration faults resolved in
 one cycle; faults whose symptoms appeared in a different service's
